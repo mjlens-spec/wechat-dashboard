@@ -75,6 +75,8 @@ pnpm skill:check
 
 安装脚本只创建指向当前仓库 `skills/wechat-dashboard` 的符号链接；如果目标位置已有同名真实目录或指向其他位置的链接，它会拒绝覆盖。Codex 安装位置为 `~/.codex/skills/wechat-dashboard`，调用 `$wechat-dashboard`；Skill 的显示名称为“微信分析启动”，桌面端也可以输入 `/` 后从 Skill 列表选择。Claude Code 安装位置为 `~/.claude/skills/wechat-dashboard`，调用 `/wechat-dashboard`。工程不依赖一个脱离列表选择流程的任意 `/微信分析启动` 文本别名。
 
+每次调用 Skill 时都会先启动临时本机服务，并自动在内置浏览器或 Google Chrome 中打开 Dashboard；明确要求“停止”时例外。单轮分析完成后页面最多保留 10 分钟，关闭页面后临时服务仍会按短租约自动退出。
+
 首次使用会打开 `/setup`，检查读取器、daemon、缓存权限和当前活跃账号，并把该账号固定为本 Dashboard 的数据源。
 
 ## 按需会话命令
@@ -108,7 +110,7 @@ pnpm session:stop
 
 默认 `scheduled` 单轮流程：
 
-1. 启动或续租本机临时 Dashboard，并增量同步消息。
+1. 启动本机临时 Dashboard，自动在内置浏览器或 Google Chrome 中打开页面，并增量同步消息。
 2. 只从当天群聊导出有界上下文：最多 50 个群、每群 180 条、总计 800 条，每条正文最多 1200 字符。
 3. Luna Max 按群独立生成当天汇总，并检查重点关注事项；Luna 无法运行时回退一次 Terra Max。
 4. 每条结论引用匿名 evidence ID；导入时验证 evidence ID 属于同一任务和同一群。
