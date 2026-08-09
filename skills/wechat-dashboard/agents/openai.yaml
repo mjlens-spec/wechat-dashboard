@@ -1,8 +1,8 @@
 interface:
   display_name: "微信分析启动"
-  short_description: "按需启动本机微信群聊分析，并更新私人 Dashboard"
+  short_description: "自动打开本机微信群聊 Dashboard，并更新私人分析"
   brand_color: "#4D675B"
-  default_prompt: "Use $wechat-dashboard to start an on-demand local WeChat analysis session and refresh separate group summaries and attention items."
+  default_prompt: "Use $wechat-dashboard to open the local Dashboard and refresh separate group summaries and attention items."
 
 policy:
   allow_implicit_invocation: true

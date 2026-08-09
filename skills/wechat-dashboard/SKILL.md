@@ -1,11 +1,11 @@
 ---
 name: wechat-dashboard
-description: Start and analyze the private on-demand macOS WeChat Dashboard with Codex or Claude Code. Use for local group-chat summaries, @mentions, urgent issues, unanswered requests, conflicts, unresolved problems, or when the user asks to start, refresh, inspect, monitor, or stop WeChat analysis.
+description: Start, open, and analyze the private on-demand macOS WeChat Dashboard with Codex or Claude Code. Use for local group-chat summaries, @mentions, urgent issues, unanswered requests, conflicts, unresolved problems, or when the user asks to start, refresh, inspect, monitor, or stop WeChat analysis.
 ---
 
 # WeChat Dashboard
 
-Run the local Dashboard only for the current user-invoked agent session. Keep every group separate and import validated structured results into the encrypted local database.
+Run the local Dashboard only for the current user-invoked agent session. Keep every group separate and import validated structured results into the encrypted local database. On every invocation except an explicit stop-only request, open the Dashboard page for the user before analysis begins.
 
 ## Non-Persistent Runtime
 
@@ -34,12 +34,17 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
 ## Start the On-Demand Session
 
 1. Resolve this Skill directory from the loaded `SKILL.md` path.
-2. Run:
+2. Always complete this section before running an analysis cycle. Do not rely on `prepare` to start the service implicitly.
+3. Run:
 
    `node <skill-dir>/scripts/dashboard-bridge.mjs start --session-minutes 10`
 
-3. If local execution is sandbox-blocked, request approval and rerun the same command. Do not substitute a persistent service.
-4. Open the returned loopback URL in Chrome when the user asked to see or monitor the Dashboard.
+4. If local execution is sandbox-blocked, request approval and rerun the same command. Do not substitute a persistent service.
+5. Immediately open the returned loopback URL on every invocation, even when the user did not separately ask to see the Dashboard:
+   - Prefer the host's built-in browser when it can open a local loopback page.
+   - Otherwise open the URL in Google Chrome on macOS.
+   - If browser-control tooling is unavailable, use the system `open -a "Google Chrome" <loopback-url>` command.
+6. Treat an explicit stop-only request as the sole exception: run the Stop flow without starting a service or opening a browser.
 
 ## Run One Analysis Cycle
 
@@ -63,6 +68,11 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
    `node <skill-dir>/scripts/dashboard-bridge.mjs import --context <context-path> --result <result-path>`
 
 9. Confirm `status: "imported"`. Report imported counts and Dashboard pages only; do not quote source messages.
+10. Leave the opened Dashboard available for a short viewing window by running:
+
+    `node <skill-dir>/scripts/dashboard-bridge.mjs ensure --session-minutes 10`
+
+    Do not stop the service immediately after a successful one-off import; it will still expire at the lease limit or shortly after all Dashboard pages close.
 
 ## Active 30-Minute Monitoring
 
@@ -79,7 +89,7 @@ After the first successful cycle:
 
 This loop is task-scoped. It is not an always-on background feature. If the current agent task cannot remain active for a full interval, explain that periodic semantic analysis has stopped; the local page may continue only until its short lease expires.
 
-Before ending the Codex task, either run `stop`, or shorten a still-needed viewing session with `ensure --session-minutes 10`. Never leave a 35-minute monitoring lease as if the task were still active.
+Before ending the Codex task, shorten the opened viewing session with `ensure --session-minutes 10`. Run `stop` instead only when the user explicitly asks to stop or the listener/viewer is no longer valid. Never leave a 35-minute monitoring lease as if the task were still active.
 
 ## Stop
 
