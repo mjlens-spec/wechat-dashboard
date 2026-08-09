@@ -11,34 +11,8 @@ export interface WxSession {
   username: string;
 }
 
-export interface WxStatsBucket {
-  hour: number;
-  count: number;
-}
-
-export interface WxStatsSender {
-  sender: string;
-  count: number;
-}
-
-export interface WxStatsType {
-  type: string;
-  count: number;
-}
-
-export interface WxStats {
-  chat: string;
-  chat_type: 'private' | 'group';
-  is_group: boolean;
-  username: string;
-  total: number;
-  by_hour: WxStatsBucket[];
-  by_type: WxStatsType[];
-  top_senders: WxStatsSender[];
-}
-
 export interface WxMessage {
-  local_id: number;
+  local_id?: number;
   sender: string;
   content: string;
   time: string;
@@ -47,14 +21,23 @@ export interface WxMessage {
 }
 
 export interface WxNewMessage extends WxMessage {
+  chat: string;
+  chat_type: 'private' | 'group';
+  is_group: boolean;
   username: string;
-  chat?: string;
 }
 
-export interface WxMember {
-  username: string;
-  nickname?: string;
-  display_name?: string;
+export interface WxNewMessagesMeta {
+  status?: string;
+  shards_hit?: number;
+  shards_scanned?: number;
+  unknown_shards?: number;
+}
+
+export interface WxNewMessagesResponse {
+  count: number;
+  messages: WxNewMessage[];
+  meta?: WxNewMessagesMeta;
 }
 
 export interface WxDaemonStatus {

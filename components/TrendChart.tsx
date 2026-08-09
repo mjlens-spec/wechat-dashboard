@@ -9,68 +9,63 @@ const ReactECharts = dynamic(() => import('echarts-for-react'), { ssr: false });
 
 export interface TrendPoint {
   date: string;
-  count: number;
+  groups: number;
+  private: number;
 }
 
-export default function TrendChart({
-  data,
-  peak,
-  avg,
-  total,
-}: {
-  data: TrendPoint[];
-  peak: TrendPoint;
-  avg: number;
-  total: number;
-}) {
+export default function TrendChart({ data }: { data: TrendPoint[] }) {
+  const totals = data.reduce(
+    (sum, point) => ({ groups: sum.groups + point.groups, private: sum.private + point.private }),
+    { groups: 0, private: 0 },
+  );
   const option = useMemo<EChartsOption>(
     () => ({
-      grid: { top: 30, right: 24, bottom: 30, left: 50 },
+      animationDuration: 280,
+      grid: { top: 42, right: 22, bottom: 30, left: 50 },
+      legend: {
+        top: 4,
+        right: 8,
+        itemWidth: 10,
+        itemHeight: 6,
+        textStyle: { color: '#6C7680', fontSize: 11 },
+      },
       tooltip: {
         trigger: 'axis',
-        backgroundColor: '#101812',
-        borderColor: '#27342c',
-        textStyle: { color: '#edf1e8' },
-        formatter: (params: unknown) => {
-          const arr = params as Array<{ name: string; value: number }>;
-          const p = arr[0];
-          return `<div style="font-size:12px"><div style="color:#aab4aa">${p.name}</div><div style="color:#7dd3a8;font-weight:600;margin-top:2px">消息数：${p.value} 条</div></div>`;
-        },
+        backgroundColor: '#15181C',
+        borderColor: '#272C31',
+        textStyle: { color: '#F4F6F8' },
       },
       xAxis: {
         type: 'category',
-        data: data.map((d) => d.date.slice(5)),
-        axisLine: { lineStyle: { color: '#27342c' } },
+        data: data.map((point) => point.date.slice(5)),
+        axisLine: { lineStyle: { color: '#C8CFD6' } },
         axisTick: { show: false },
-        axisLabel: { color: '#737f75', fontSize: 11 },
+        axisLabel: { color: '#6C7680', fontSize: 10 },
       },
       yAxis: {
         type: 'value',
-        splitLine: { lineStyle: { color: 'rgba(154,174,158,0.12)' } },
-        axisLabel: { color: '#737f75', fontSize: 11 },
+        minInterval: 1,
+        splitLine: { lineStyle: { color: 'rgba(200,207,214,0.55)' } },
+        axisLabel: { color: '#6C7680', fontSize: 10 },
       },
       series: [
         {
+          name: '群聊',
           type: 'line',
           smooth: true,
-          symbol: 'circle',
-          symbolSize: 6,
-          data: data.map((d) => d.count),
-          lineStyle: { color: '#7dd3a8', width: 2 },
-          itemStyle: { color: '#7dd3a8' },
-          areaStyle: {
-            color: {
-              type: 'linear',
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: 'rgba(125,211,168,0.34)' },
-                { offset: 1, color: 'rgba(125,211,168,0.02)' },
-              ],
-            },
-          },
+          symbol: 'none',
+          data: data.map((point) => point.groups),
+          lineStyle: { color: '#1F566B', width: 2 },
+          areaStyle: { color: 'rgba(31,86,107,0.10)' },
+        },
+        {
+          name: '私信',
+          type: 'line',
+          smooth: true,
+          symbol: 'none',
+          data: data.map((point) => point.private),
+          lineStyle: { color: '#8E3B46', width: 2 },
+          areaStyle: { color: 'rgba(142,59,70,0.07)' },
         },
       ],
     }),
@@ -78,39 +73,23 @@ export default function TrendChart({
   );
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[14px] font-semibold">
+    <section className="card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[15px] font-semibold">
           <TrendingUp size={14} className="text-[var(--accent)]" />
-          消息走势
+          消息趋势
         </div>
-        <div className="text-[11px] text-[var(--text-3)]">
-          过去 {data.length} 天 · {total.toLocaleString()} 条
+        <div className="text-[12px] text-[var(--text-3)]">
+          群聊 {totals.groups.toLocaleString()} · 私信 {totals.private.toLocaleString()}
         </div>
       </div>
-
-      <div className="mt-2 flex gap-6 text-[11px] text-[var(--text-3)]">
-        <span>
-          峰值 <span className="text-[var(--text)]">{peak.count} 条/天</span>
-          {peak.date && <span className="ml-1 text-[var(--text-3)]">· {peak.date}</span>}
-        </span>
-        <span>
-          均值 <span className="text-[var(--text)]">{avg.toFixed(1)}</span>
-        </span>
-        <span>
-          总计 <span className="text-[var(--text)]">{total.toLocaleString()} 条</span>
-        </span>
-      </div>
-
-      <div className="mt-2">
-        {data.length > 0 ? (
-          <ReactECharts option={option} style={{ height: 280 }} />
-        ) : (
-          <div className="flex h-[280px] items-center justify-center text-[12px] text-[var(--text-3)]">
-            暂无数据 · 点击右上「重扫」加载
-          </div>
-        )}
-      </div>
-    </div>
+      {data.some((point) => point.groups + point.private > 0) ? (
+        <ReactECharts option={option} style={{ height: 290 }} />
+      ) : (
+        <div className="flex h-[290px] items-center justify-center text-[13px] text-[var(--text-3)]">
+          还没有本地消息快照
+        </div>
+      )}
+    </section>
   );
 }

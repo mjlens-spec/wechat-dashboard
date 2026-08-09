@@ -1,47 +1,53 @@
-import Link from 'next/link';
-import { Activity, MessageCircle, AtSign, MoonStar } from 'lucide-react';
+import { MessagesSquare, MessageCircleMore, UsersRound, Wifi } from 'lucide-react';
 
 export interface CardsData {
+  total_messages: number;
+  active_conversations: number;
   active_groups: number;
   total_groups: number;
-  total_messages: number;
-  mentions: number;
-  silent_groups: number;
-  avg_per_group: number;
+  active_private: number;
+  total_private: number;
+  total_conversations: number;
 }
 
-export default function StatGrid({ cards, days }: { cards?: CardsData; days: number }) {
+export default function StatGrid({
+  cards,
+  days,
+  lastSuccessAt,
+  stale,
+}: {
+  cards?: CardsData;
+  days: number;
+  lastSuccessAt: number | null;
+  stale: boolean;
+}) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       <Card
-        icon={<Activity size={14} className="text-[var(--accent)]" />}
-        label="活跃群"
-        value={cards?.active_groups ?? '—'}
-        sub={cards ? `共扫 ${cards.total_groups} 个群` : '等待扫描'}
+        icon={<MessagesSquare size={15} className="text-[var(--accent)]" />}
+        label="窗口消息"
+        value={cards?.total_messages.toLocaleString() ?? '—'}
+        sub={`统计范围 · ${days} 天`}
       />
       <Card
-        icon={<MessageCircle size={14} className="text-[var(--accent)]" />}
-        label="总消息"
-        value={cards?.total_messages?.toLocaleString() ?? '—'}
-        sub={
-          cards
-            ? `过去 ${days * 24}h · 平均每群 ${cards.avg_per_group} 条`
-            : '等待扫描'
-        }
+        icon={<UsersRound size={15} className="text-[var(--accent)]" />}
+        label="活跃群聊"
+        value={cards ? `${cards.active_groups} / ${cards.total_groups}` : '—'}
+        sub="有消息的群 / 已发现群"
       />
       <Card
-        icon={<AtSign size={14} className="text-[var(--warn)]" />}
-        label="@ 我的"
-        value={cards?.mentions ?? 0}
-        sub={cards ? '需要回复' : '等待扫描'}
+        icon={<MessageCircleMore size={15} className="text-[var(--warn)]" />}
+        label="活跃私信"
+        value={cards ? `${cards.active_private} / ${cards.total_private}` : '—'}
+        sub="有消息的私信 / 已发现私信"
         accent="warn"
-        href="/mentions"
       />
       <Card
-        icon={<MoonStar size={14} className="text-[var(--text-3)]" />}
-        label="静默群"
-        value={cards?.silent_groups ?? '—'}
-        sub={cards ? `过去 ${days * 24}h 无活动` : '等待扫描'}
+        icon={<Wifi size={15} className={stale ? 'text-[var(--danger)]' : 'text-[var(--accent)]'} />}
+        label="数据新鲜度"
+        value={lastSuccessAt ? relativeTime(lastSuccessAt) : '未同步'}
+        sub={stale ? '已超过 60 分钟，请检查读取器' : '页面打开时每 30 分钟刷新'}
+        accent={stale ? 'danger' : undefined}
       />
     </div>
   );
@@ -53,52 +59,41 @@ function Card({
   value,
   sub,
   accent,
-  href,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number | string;
   sub: string;
-  accent?: 'warn';
-  href?: string;
+  accent?: 'warn' | 'danger';
 }) {
-  const className = `card group relative overflow-hidden px-5 py-4 ${
-    href
-      ? 'block transition-colors hover:border-[rgba(213,162,83,0.5)] hover:bg-[var(--surface-2)] focus:outline-none focus:ring-1 focus:ring-[var(--warn)]'
-      : ''
-  }`;
-  const content = (
-    <>
-      <div className={`absolute inset-x-0 top-0 h-px ${accent === 'warn' ? 'bg-[var(--warn)]' : 'bg-[var(--accent)]'} opacity-60`} />
-      <div className="flex items-center justify-between gap-2 text-[12px] text-[var(--text-2)]">
+  const line =
+    accent === 'warn'
+      ? 'bg-[var(--warn)]'
+      : accent === 'danger'
+        ? 'bg-[var(--danger)]'
+        : 'bg-[var(--accent)]';
+  return (
+    <div className="card relative overflow-hidden px-5 py-4">
+      <div className={`absolute inset-x-0 top-0 h-px ${line} opacity-60`} />
+      <div className="flex items-center justify-between gap-2 text-[13px] text-[var(--text-2)]">
         <span className="flex items-center gap-1.5">
           {icon}
-          <span>{label}</span>
+          {label}
         </span>
-        <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-3)]">Metric</span>
+        <span className="text-[10px] uppercase tracking-[0.15em] text-[var(--text-3)]">Local</span>
       </div>
-      <div
-        className={`mt-3 text-[34px] font-semibold leading-none tabular-nums ${
-          accent === 'warn' ? 'text-[var(--warn)]' : 'text-[var(--text)]'
-        }`}
-      >
+      <div className="mt-3 text-[32px] font-semibold leading-none tabular-nums text-[var(--text)]">
         {value}
       </div>
-      <div className="mt-2 text-[11px] text-[var(--text-3)]">{sub}</div>
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link href={href} className={className} aria-label={`查看${label}消息`}>
-        {content}
-      </Link>
-    );
-  }
-
-  return (
-    <div className={className}>
-      {content}
+      <div className="mt-2 text-[12px] text-[var(--text-3)]">{sub}</div>
     </div>
   );
+}
+
+function relativeTime(timestamp: number) {
+  const diff = Math.max(0, Date.now() - timestamp);
+  if (diff < 60_000) return '刚刚';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  return `${Math.floor(diff / 86_400_000)} 天前`;
 }

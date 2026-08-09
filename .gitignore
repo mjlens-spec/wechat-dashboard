@@ -18,6 +18,7 @@ dist/
 
 # local runtime data
 data/
+.local-debug/
 *.db
 *.db-shm
 *.db-wal
@@ -30,13 +31,18 @@ data/
 tsconfig.tsbuildinfo
 .cache/
 .turbo/
+.playwright-cli/
+output/playwright/
 
 # OS/editor
 .DS_Store
 .idea/
 .vscode/
 
-# agent/private workflow metadata
+# agent workflow metadata
 .beads/
-CLAUDE.md
-AGENTS.md
+
+# WeChat reader secrets and captures
+all_keys.json
+*.keys.json
+*.candidates.json

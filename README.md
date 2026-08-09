@@ -1,185 +1,193 @@
-# WeChat Radar
+# WeChat Dashboard
 
-> 群太多，真正有价值的消息却总是被淹没。
-> WeChat Radar turns noisy WeChat groups into a local-first intelligence dashboard.
+WeChat Dashboard 是一个面向 Codex、兼容 Claude Code 的 macOS 本机微信群聊看板。它只读已经登录的微信 Mac 客户端数据，在 Chrome 中展示近期动态；Codex 首选 Luna Max、回退 Terra Max，Claude Code 使用当前实际模型，对受限的今日群聊上下文做语义分析，再把逐群汇总和重点关注提示加密写回本机。
 
-[![GitHub stars](https://img.shields.io/github/stars/joeseesun/wechat-radar?style=social)](https://github.com/joeseesun/wechat-radar/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/joeseesun/wechat-radar?style=social)](https://github.com/joeseesun/wechat-radar/network/members)
-[![Issues](https://img.shields.io/github/issues/joeseesun/wechat-radar)](https://github.com/joeseesun/wechat-radar/issues)
-[![Last commit](https://img.shields.io/github/last-commit/joeseesun/wechat-radar)](https://github.com/joeseesun/wechat-radar/commits/main)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+当前版本已经接入真实本地数据。群聊是最高优先级；私信只做尽力读取，持续无法解析时会跳过，不影响群聊刷新。项目不提供发送、回复、撤回、加好友或修改联系人等微信操作。
 
-![WeChat Radar product preview](docs/assets/product-preview.svg)
+## 运行方式
 
-**[中文](#中文) | [English](#english)**
+项目采用“调用才启动”的会话模式：
 
----
+- 不创建 Codex Automation、cron 或 macOS LaunchAgent。
+- 调用 Skill 时启动只监听 `127.0.0.1` 的临时 production 服务。
+- 任意 Dashboard 页面打开时，本机页面心跳会在同步到期后触发新增消息读取；频率约为每 30 分钟一次，每小时做一次时间戳对账。
+- 页面每分钟向本机服务发送一次心跳，但只能续到当前 Skill 租约上限。所有页面关闭后，临时服务约 3 分钟内自动退出；当前 Agent 任务结束时会停止服务或把查看宽限缩短到 10 分钟。
+- 模型语义分析只存在于当前仍在运行的 Codex 或 Claude Code 任务中。任务结束后不会继续后台分析。
+- 再次使用时重新调用 Skill；也可以显式运行 `pnpm session:stop`。
 
-<a name="中文"></a>
+这意味着本地页面服务和 AI 分析是两个边界：Chrome 页面负责维持临时本机监听和消息增量刷新；当前 Agent 任务负责语义分析。没有常驻调度器时，任务结束后无法继续每 30 分钟调用模型。
 
-## 中文
+## 当前能力
 
-WeChat Radar 是一个本地优先的微信群聊情报看板。它把群消息、话题、链接、@我的消息和高信号人物聚合成一个可按日期查看的工作台。
+- 读取本机会话元数据，区分群聊与私信。
+- 首次同步先建立元数据快照，再分批补齐最近 2 小时和当天消息。
+- 页面打开期间每 30 分钟增量同步；提供“立即刷新”和“继续补齐今天”。
+- 展示消息量、活跃群聊、活跃私信、趋势、近期会话和同步覆盖率。
+- 总览提供“优先群聊”工作区：群聊可手动星标置顶；优先关键词命中群名或当前统计区间消息时自动前置；搜索可以同时检索群名和本机已同步的区间消息。
+- 优先级顺序固定为“星标置顶 → 关键词命中数 → 当前区间消息量 → 最近活跃时间”。关键词使用 AES-256-GCM 加密保存，搜索与排序只在本机完成。
+- `/summaries` 为每个群生成一张独立卡片，不跨群合并。
+- `/attention` 展示“重点关注提示”，覆盖重要 @ 我、客户情绪、紧急事项、久未回复、冲突和久无方案六类情况。
+- Luna Max 是主分析模型；无法运行时只回退一次 Terra Max，结果记录真实模型名。
+- 所有结构化结论必须引用同一任务、同一群的 evidence ID，导入时强制校验。
+- 聊天正文、会话名称、摘要、发送者、群聊汇总和提示正文使用 AES-256-GCM 加密；主密钥保存在 macOS Keychain。
+- UI 采用本机 Lens Design 的 Slate & Wine 视觉语言：孔雀蓝、酒红、金色和冷灰纸面，使用克制圆角、细描边与轻量阴影；字体只使用 macOS 系统黑体和通用 sans-serif，不依赖特殊品牌字体。
 
-你得到的不是“聊天记录列表”，而是每天可以直接处理的情报：
+## 明确边界
 
-- 今日优先看：消息、文章、工具、异动分区展示
-- 话题雷达：用 Codex CLI 按天聚合跨群话题
-- 链接情报：文章/工具资源去重，生成可读标题
-- 群日报：每天活跃群可生成摘要报告，方便复制给 AI 继续处理
-- 本地存储：聊天数据落到你自己的 SQLite，不上传到第三方服务
-- 明暗主题：默认奶白色浅色主题，也支持深色模式
+Dashboard 和 Skill 不会执行以下动作：
 
-## 快速开始
+- 运行 `wx init`；
+- 修改微信签名；
+- 启动 Frida 或附加微信进程；
+- 退出、重启或重新登录微信；
+- 导出私信给模型；
+- 上传完整数据库、数据库密钥或账号目录；
+- 安装任何常驻 Dashboard 服务或定时 AI 任务。
+
+已有可用密钥映射时不要再次运行 `wx init`，避免覆盖当前状态。读取器初始化和密钥恢复属于单独的、低频受控维护工作。
+
+## 运行条件
+
+- macOS；当前实测环境为 Apple Silicon 和微信 Mac 版 4.1.11。
+- Node.js 20 或更高版本、pnpm。
+- 已配置并可读取当前账号的 `wx` 读取器。
+- `wx daemon` 正在运行，且 `~/.wx-cli` 只允许当前用户访问。
+- 本机 Codex 可调用 Luna Max；Terra Max 作为回退。
+
+## 安装
 
 ```bash
-git clone https://github.com/joeseesun/wechat-radar.git
-cd wechat-radar
-pnpm install
+git clone https://github.com/mjlens-spec/wechat-dashboard.git
+cd wechat-dashboard
+pnpm install --frozen-lockfile
 pnpm rebuild better-sqlite3
-pnpm dev
+pnpm privacy:harden
+pnpm reader:inspect
+pnpm build
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)。首次进入会跳到 `/setup`，按页面提示填写你的微信名、确认隐私说明，也可以先启用 demo 数据体验。
-
-## 前置条件
-
-- [ ] macOS，且已登录微信 4.x
-- [ ] Node.js 20+：`node --version`
-- [ ] pnpm：`corepack enable && pnpm --version`
-- [ ] wx-cli：`wx --version`
-- [ ] wx daemon 正在运行：`wx daemon status`
-- [ ] 如果要让话题聚合更好，安装并登录 Codex CLI：`codex --version`
-
-wx-cli 可参考原项目安装与初始化：[jackwener/wx-cli](https://github.com/jackwener/wx-cli)。
-
-## 配置
-
-默认数据目录是 `~/.wechat-radar/`，不会写进项目目录。
-
-你可以用环境变量覆盖：
+把仓库内 Skill 安装到当前用户的 Codex 和 Claude Code：
 
 ```bash
-cp .env.example .env.local
+pnpm skill:install
+pnpm skill:check
 ```
 
-常用配置：
+安装脚本只创建指向当前仓库 `skills/wechat-dashboard` 的符号链接；如果目标位置已有同名真实目录或指向其他位置的链接，它会拒绝覆盖。Codex 安装位置为 `~/.codex/skills/wechat-dashboard`，调用 `$wechat-dashboard`；Skill 的显示名称为“微信分析启动”，桌面端也可以输入 `/` 后从 Skill 列表选择。Claude Code 安装位置为 `~/.claude/skills/wechat-dashboard`，调用 `/wechat-dashboard`。工程不依赖一个脱离列表选择流程的任意 `/微信分析启动` 文本别名。
+
+首次使用会打开 `/setup`，检查读取器、daemon、缓存权限和当前活跃账号，并把该账号固定为本 Dashboard 的数据源。
+
+## 按需会话命令
 
 ```bash
-WECHAT_RADAR_DATA_DIR=~/.wechat-radar
-WECHAT_RADAR_MY_NAMES=张三,San Zhang,zhangsan
-WECHAT_RADAR_DEMO=0
-WECHAT_RADAR_CODEX_MODEL=
+# 启动临时服务，默认给 10 分钟打开页面的宽限期
+pnpm session:start
+
+# 查看服务、页面心跳和最近分析任务
+pnpm session:status
+
+# 只终止经项目路径和 session ID 验证的本项目临时服务
+pnpm session:stop
 ```
 
-也可以直接在 `/setup` 页面配置。配置会写入 `~/.wechat-radar/config.json`。
+开发界面时可显式使用 `pnpm dev`。开发服务器不受按需租约管理，需要开发者自行停止。
 
-## 使用方式
+## 同步机制
 
-1. 进入首页，选择日期或时间范围。
-2. 点击“重扫”同步当前范围消息。
-3. 点击“全量同步”拉取更长历史。
-4. 打开“话题雷达”查看跨群主题。
-5. 打开“链接情报”查看文章和工具资源。
-6. 在活跃群列表点击“日报”查看单群日报。
+首次进入真实数据模式时：
 
-你可以这样和 AI 配合：
+1. 导入所有可识别的会话元数据，不读取大段历史正文。
+2. 优先同步最近 2 小时内活跃的群聊，再处理可读取的私信。
+3. 当天消息按小批次补齐，每批最多处理 20 个会话。
+4. 任意 Dashboard 页面打开时，全局页面心跳会在 30 分钟同步到期后调用一次增量读取；停留在总览、群聊汇总或重点关注提示页面均有效。
+5. 每小时用会话时间戳对账，补抓读取器增量状态可能遗漏的会话。
 
-- “把今天所有 Codex 相关话题整理成一篇博客大纲。”
-- “复制这个群日报，帮我提炼值得回复的机会。”
-- “把链接情报里的工具做成一张试用优先级表。”
+同步任务在服务端后台运行，数据库保存单实例锁、进度和错误码。群聊解析失败会进入后续重试；无法解析且没有可用名称的私信会标记为 `unsupported`。
 
-## 数据与隐私
+## Codex 智能分析
 
-WeChat Radar 默认只在本机读写数据：
+默认 `scheduled` 单轮流程：
 
-- `~/.wechat-radar/radar.db`：SQLite 主数据库
-- `~/.wechat-radar/config.json`：本地配置
-- `~/.wechat-radar/backups/`：可选备份
+1. 启动或续租本机临时 Dashboard，并增量同步消息。
+2. 只从当天群聊导出有界上下文：最多 50 个群、每群 180 条、总计 800 条，每条正文最多 1200 字符。
+3. Luna Max 按群独立生成当天汇总，并检查重点关注事项；Luna 无法运行时回退一次 Terra Max。
+4. 每条结论引用匿名 evidence ID；导入时验证 evidence ID 属于同一任务和同一群。
+5. 结果继续加密落盘；临时上下文和结果文件在成功导入后删除。
 
-安全设计：
+用户明确要求“持续监控”时，Skill 可以让当前 Codex 或 Claude Code 任务保持活动，并使用 35 分钟任务租约覆盖下一次 30 分钟循环。每轮前必须确认临时监听仍可达且 Chrome 页面仍有心跳；页面关闭后停止，不自动重启。这个循环不会跨越当前 Agent 任务，也不会创建定时 Automation。任务结束前必须停止服务，或把仅用于查看的宽限缩短到 10 分钟。
 
-- wx-cli 调用使用 `child_process.execFile` 参数数组，不拼 shell
-- SQLite 使用 prepared statements
-- 页面只以 React 文本节点渲染聊天内容
-- 不把微信密钥、会话、数据库、模型缓存提交进仓库
+手动桥接命令：
 
-重要提醒：这个项目会读取你本机微信数据。请确认你的使用方式符合微信客户端规则、当地法律、群成员隐私预期和你所在组织的合规要求。不要把包含真实聊天内容的数据库或截图上传到公开仓库。
+```bash
+node skills/wechat-dashboard/scripts/dashboard-bridge.mjs prepare --mode summaries
+node skills/wechat-dashboard/scripts/dashboard-bridge.mjs prepare --mode alerts
+```
 
-## 项目结构
+桥接脚本拒绝非 loopback URL。
+
+## 本地数据与安全
 
 ```text
-app/                 Next.js App Router 页面与 API
-components/          看板、侧边栏、图表、消息渲染组件
-lib/                 wx-cli 封装、SQLite、话题/链接聚合逻辑
-scripts/             本地维护脚本
-docs/assets/         README 图片与公开素材
+~/.wechat-dashboard/config.json
+~/.wechat-dashboard/dashboard.db
+~/.wechat-dashboard/backups/
+~/.wechat-dashboard/logs/
+~/.wechat-dashboard/session-lease.json    # 临时存在
+~/.wechat-dashboard/session-service.json  # 临时存在
+~/.wx-cli/
+```
+
+Dashboard 数据根目录固定为当前用户的 `~/.wechat-dashboard`，不接受运行时重定向。目录权限基线为 `0700`；配置、数据库、WAL、SHM、备份、租约、状态和读取器缓存文件为 `0600`。应用会拒绝数据根目录、配置或数据库上的符号链接、异常文件类型和非当前用户所有的路径。可重新执行 `pnpm privacy:harden`。完整边界见 [PRIVACY.md](PRIVACY.md) 和 [SECURITY.md](SECURITY.md)。
+
+## 迁移到另一台 Mac
+
+代码可迁移到少量内测用户的 Mac，但读取器、账号和密钥必须逐机独立准备：
+
+1. 从私有仓库克隆并安装依赖。
+2. 在该 Mac 上准备匹配当前微信版本和当前账号的 `wx` 环境。
+3. 不复制其他用户的 `all_keys.json`、Keychain 主密钥或 Dashboard 数据库。
+4. 运行 `pnpm privacy:harden`、`pnpm reader:inspect` 和 `pnpm build`。
+5. 运行 `pnpm skill:install`，把同一份 Skill 安全链接到 Codex 和 Claude Code 的用户 Skill 目录。
+6. 在 Codex 调用 `$wechat-dashboard`，或在 Claude Code 调用 `/wechat-dashboard`，再到 `/setup` 验证本机读取器和账号。
+7. 先完成安全 bootstrap，再逐批扩展当天覆盖。
+
+不需要安装 LaunchAgent，也不需要创建 Codex Automation。微信升级、重装或切换账号后，可能需要重新做一次低频、受控的本机读取器验证。
+
+## 验证
+
+```bash
+./node_modules/.bin/eslint .
+./node_modules/.bin/tsc --noEmit
+pnpm build
+node scripts/verify-intelligence.mjs
+pnpm priority:verify
+pnpm priority:verify:live
+pnpm session:verify
+pnpm security:verify
+pnpm skill:check
+pnpm reader:inspect
 ```
 
 ## 常见问题
 
-| 问题 | 解决方法 |
+| 现象 | 处理方式 |
 | --- | --- |
-| `wx daemon 未运行` | 先运行 `wx daemon start`，再刷新页面。 |
-| `better-sqlite3` native 模块报错 | 运行 `pnpm rebuild better-sqlite3`。 |
-| 首页没有数据 | 先完成 `/setup`，确认 `wx sessions --json` 有输出，然后点击“重扫”。 |
-| 话题雷达为空 | 打开对应日期会自动构建；也可以点击“构建话题”。需要本机可运行 `codex`。 |
-| 不想读取真实微信 | 在 `/setup` 勾选 demo 模式，或设置 `WECHAT_RADAR_DEMO=1`。 |
+| 页面进入 `/setup` | 检查读取器、daemon、缓存权限和活跃账号。 |
+| `wxReaderReady` 为 false | 保护现有 `~/.wx-cli/all_keys.json`，不要直接运行 `wx init`；按 handoff 检查账号目录和密钥映射。 |
+| Dashboard 提示账号变化 | 停止同步，确认微信当前登录账号；需要切换时重新进入 `/setup`。 |
+| 个别私信没有正文 | 可以跳过，不影响群聊。 |
+| Skill 报 `PRODUCTION_BUILD_MISSING` | 在项目目录运行 `pnpm build` 后重试。 |
+| Skill 报 `DASHBOARD_VIEWER_CLOSED` | 页面已关闭，监控按设计停止；重新调用 Skill 即可。 |
+| 没有“@ 我的信息” | 在 `/setup` 填写本人在工作群使用的昵称或别名。 |
+| `better-sqlite3` 无法加载 | 运行 `pnpm rebuild better-sqlite3`。 |
 
-## 致谢
+## 项目协作
 
-- [jackwener/wx-cli](https://github.com/jackwener/wx-cli)：本项目依赖它读取本机微信数据。
-- [Next.js](https://nextjs.org/)、[ECharts](https://echarts.apache.org/)、[better-sqlite3](https://github.com/WiseLibs/better-sqlite3)。
+接手开发前阅读 [AGENTS.md](AGENTS.md)、[CLAUDE.md](CLAUDE.md) 和 [项目 Context / Handoff](WeChat_Dashboard_Context_Handoff_OC_0809%5BA%5D.md)。真实聊天数据、数据库、Keychain 密钥、`~/.wx-cli`、`.local-debug/`、日志和真实截图不得提交到 Git。未经用户要求，不提交、不推送、不创建 PR。
 
----
+## 上游与致谢
 
-<a name="english"></a>
-
-## English
-
-WeChat Radar is a local-first intelligence dashboard for WeChat groups. It turns noisy group chats into daily briefings, cross-group topics, link intelligence, mentions, and per-group reports.
-
-### Features
-
-- Daily dashboard for messages, links, tools, anomalies, and people
-- Codex CLI powered topic clustering by date
-- Link intelligence with generated titles and deduplication
-- Per-group daily reports with copy-friendly output
-- Local SQLite storage by default
-- Light and dark themes
-
-### Install
-
-```bash
-git clone https://github.com/joeseesun/wechat-radar.git
-cd wechat-radar
-pnpm install
-pnpm rebuild better-sqlite3
-pnpm dev
-```
-
-Open [http://localhost:3000](http://localhost:3000). The first run redirects to `/setup`, where you can configure your WeChat display names and privacy confirmation, or enable demo mode.
-
-### Requirements
-
-- [ ] macOS with WeChat 4.x logged in
-- [ ] Node.js 20+
-- [ ] pnpm
-- [ ] wx-cli initialized and running
-- [ ] Optional: Codex CLI for better topic/link summaries
-
-### Privacy
-
-By default, runtime data is stored locally under `~/.wechat-radar/`. The app does not upload your chat database. You are responsible for using it in a way that respects WeChat rules, local laws, group privacy expectations, and organizational compliance.
-
-### Troubleshooting
-
-| Problem | Fix |
-| --- | --- |
-| wx daemon is not running | Run `wx daemon start`. |
-| better-sqlite3 fails to load | Run `pnpm rebuild better-sqlite3`. |
-| No dashboard data | Finish `/setup`, confirm `wx sessions --json` works, then click rescan. |
-| Topic radar is empty | Open the date or click build topics; make sure `codex` is available. |
+本项目从 [zjp1997720/wechat-radar](https://github.com/zjp1997720/wechat-radar) 的思路演化而来，当前已重构为独立的本地 Dashboard。读取能力依赖 [jackwener/wx-cli](https://github.com/jackwener/wx-cli)。界面与本地服务使用 Next.js、React、ECharts 和 better-sqlite3。
 
 ## License
 

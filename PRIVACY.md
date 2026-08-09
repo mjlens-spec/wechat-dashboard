@@ -1,11 +1,77 @@
 # Privacy
 
-WeChat Radar is designed as a local-first tool.
+WeChat Dashboard 的数据读取、加密存储和页面展示均发生在本机。Dashboard 服务本身不调用外部模型；只有用户在 Codex 或 Claude Code 调用 WeChat Dashboard Skill 时，系统才会把经过限量的当日群聊上下文带入当前 Agent 分析会话，再把结构化结果写回本机。Codex 首选 Luna Max、回退 Terra Max；Claude Code 使用其当前实际模型并如实记录。项目不创建 Codex Automation、cron 或 LaunchAgent。
 
-- Chat data is stored in a local SQLite database under `~/.wechat-radar` by default.
-- The app does not upload chat records to a hosted service.
-- The app reads data through your local `wx` CLI installation.
-- Do not commit `*.db`, `.env.local`, logs, or generated runtime data.
-- If you enable optional LLM/Codex workflows, review what data those tools receive before using them.
+## 读取与保存的数据
 
-You are responsible for complying with local law, platform terms, and group member expectations before reading, storing, or processing chat data.
+Dashboard 从本机 `wx` 读取器获得会话元数据和消息，并保存在固定的 `~/.wechat-dashboard/dashboard.db`。应用不接受环境变量把该目录改到其他位置。
+
+以下字段使用 AES-256-GCM 加密后写入 SQLite：
+
+- 会话名称；
+- 会话摘要；
+- 消息发送者；
+- 消息正文。
+- 每个群的当天汇总、决定、待办和风险；
+- 重点关注提示的标题、说明和建议动作。
+- 用户设置的优先关键词。
+
+每条密文使用独立随机 nonce。主密钥保存在 macOS Keychain，服务名为 `com.mjlens.wechat-dashboard`，不会写入项目目录或配置文件。
+
+以下字段为支持索引、去重和同步调度而保持明文：
+
+- 本地会话标识和消息标识；
+- 群聊 / 私信类型；
+- 时间戳、日期、消息类型和未读数；
+- 内容指纹、覆盖率、同步游标、任务状态和错误码。
+- 分析任务 ID、匿名 evidence ID、模型标签、置信度、类别和处理状态。
+- 群聊星标状态、优先设置更新时间。
+
+这些元数据仍可能暴露使用模式，应与聊天正文按同等敏感级别保护。
+
+## 本机解密边界
+
+服务只监听 `127.0.0.1`。Dashboard API 在响应本机浏览器请求或 Skill 创建受限分析任务时才解密所需字段。分析上下文只包含当天群聊，不包含私信；默认上限为 50 个群、每群 180 条、总计 800 条消息，每条正文最多 1200 字符。
+
+总览的群聊检索与优先级计算属于本机浏览器功能，不进入模型会话。只有在用户设置了优先关键词或输入搜索词时，Dashboard API 才会在本机解密当前统计区间的群聊消息进行匹配；单次最多扫描最近 10,000 条区间消息，每个群的检索语料最多 200,000 字符。API 只向本机页面返回匹配后的群聊信息，不保存搜索词。
+
+Skill 使用权限为 `0700` 的临时目录和 `0600` 文件保存一次性上下文与结果，成功导入后立即删除。结构化结果必须引用当前任务中的匿名 evidence ID；导入端会校验证据属于同一任务和同一群。Chrome 扩展、Codex 会话记录、屏幕录制、截图以及同一 macOS 用户下的其他进程仍可能观察已解密内容；本项目无法隔离已经取得同一用户权限的软件。
+
+## 文件位置与权限
+
+```text
+~/.wechat-dashboard/   目录 0700
+config.json            文件 0600
+dashboard.db           文件 0600
+dashboard.db-wal       文件 0600
+dashboard.db-shm       文件 0600
+backups/*              文件 0600
+session-lease.json     临时文件 0600
+session-service.json   临时文件 0600
+~/.wx-cli/             目录 0700，内部文件 0600
+```
+
+执行 `pnpm privacy:harden` 可以重新收紧 Dashboard 与读取器缓存权限；脚本拒绝跟随符号链接。
+Dashboard 自身也会在打开配置和数据库前校验路径：数据根目录必须是当前用户拥有的普通目录，配置与数据库必须是当前用户拥有的普通文件；遇到符号链接或异常文件类型时直接停止。
+
+## Agent 分析边界
+
+- Dashboard 应用运行时不直接调用外部 LLM、搜索或解析服务。
+- 自动同步只访问本机读取器和本机 SQLite。
+- Skill 调用后才启动本机会话；语义分析首选 Luna Max，无法运行时可回退一次 Terra Max。
+- 用户要求持续监控时，30 分钟语义循环只在当前 Codex 或 Claude Code 任务仍活动且 Dashboard 页面仍发送本机心跳时运行。
+- 当前 Agent 任务结束后不再调用模型；任务结束前会停止服务或把查看宽限缩短到 10 分钟。所有页面关闭后，页面心跳停止，按需本机服务约 3 分钟内失效。
+- 进入模型会话的内容仅为当前任务导出的有界群聊上下文，不包含完整数据库、Keychain 主密钥、读取器密钥或账号目录。
+- 模型输出只通过本机 loopback API 导回，正文继续加密落盘。
+- 安装 npm 依赖和克隆 Git 仓库会访问相应的软件源，这与聊天数据同步相互独立。
+- 不要把真实数据库、截图、日志、账号目录、联系人、密钥或 `.local-debug/` 上传到 GitHub Issue、聊天工具或公开仓库。
+
+## 保留、备份与删除
+
+当前版本不会自动删除历史数据，也不会自动上传备份。`pnpm db:backup` 创建的 SQLite 备份仍是加密数据库，但不包含 Keychain 主密钥；备份必须继续保存在受限的本机目录中。
+
+停止当前会话时运行 `pnpm session:stop`。完全停止使用时，再删除 `~/.wechat-dashboard` 及对应 Keychain 项；删除前确认是否需要保留本地备份，该操作不可由仓库恢复真实聊天数据。
+
+## 内测者责任
+
+本项目只适合获得明确授权的少量本地内测者。使用者需要自行确认其使用方式符合当地法律、微信客户端规则、群成员的隐私预期和所在组织的内部制度。

@@ -1,115 +1,139 @@
 'use client';
 
-import { Calendar, RefreshCw, Database } from 'lucide-react';
-import GlobalSearch from './GlobalSearch';
+import { Calendar, Clock3, Database, RefreshCw } from 'lucide-react';
 
 export type RangeKey = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
+export type ConversationFilter = 'all' | 'group' | 'private';
 
 const RANGES: { key: RangeKey; label: string }[] = [
-  { key: 'day', label: '日' },
-  { key: 'week', label: '周' },
-  { key: 'month', label: '月' },
-  { key: 'quarter', label: '季' },
-  { key: 'year', label: '年' },
+  { key: 'day', label: '今天' },
+  { key: 'week', label: '7 天' },
+  { key: 'month', label: '30 天' },
+  { key: 'quarter', label: '90 天' },
+];
+
+const FILTERS: { key: ConversationFilter; label: string }[] = [
+  { key: 'all', label: '全部' },
+  { key: 'group', label: '群聊' },
+  { key: 'private', label: '私信' },
 ];
 
 export default function TopBar({
   range,
+  filter,
   date,
   onRangeChange,
+  onFilterChange,
   onDateChange,
-  rescanning,
-  onRescan,
-  onFullSync,
-  rescanInfo,
+  syncing,
+  onSync,
+  onInitialSync,
+  statusText,
+  nextSyncAt,
 }: {
   range: RangeKey;
+  filter: ConversationFilter;
   date: string;
-  onRangeChange: (r: RangeKey) => void;
+  onRangeChange: (range: RangeKey) => void;
+  onFilterChange: (filter: ConversationFilter) => void;
   onDateChange: (date: string) => void;
-  rescanning: boolean;
-  onRescan: () => void;
-  onFullSync?: () => void;
-  rescanInfo?: string;
+  syncing: boolean;
+  onSync: () => void;
+  onInitialSync: () => void;
+  statusText: string;
+  nextSyncAt: number;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[var(--chrome-bg)] px-6 py-3 backdrop-blur">
-      <div>
-        <div className="report-kicker">Daily Intelligence</div>
-        <div className="mt-1 text-[16px] font-semibold tracking-wide">驾驶舱 · 情报看板</div>
-        <div className="mt-0.5 text-[11px] text-[var(--text-3)]">
-          {rescanInfo ?? '尚未扫描，点击「重扫」加载数据'}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <GlobalSearch />
-        <div className="control-surface flex items-center gap-1.5 rounded-md px-2.5 py-1.5">
-          <Calendar size={13} className="text-[var(--text-3)]" />
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="theme-date-input min-w-[128px] bg-transparent text-[12px] outline-none"
-            title="按日期查看驾驶舱"
-          />
+    <div className="app-topbar border-b border-[var(--border-soft)] px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="report-kicker">Live Local Snapshot</div>
+          <div className="mt-1 text-[18px] font-semibold tracking-wide">微信群聊监控</div>
+          <div className="mt-1 flex items-center gap-1.5 text-[12px] text-[var(--text-3)]">
+            <Clock3 size={12} />
+            <span className="truncate">{statusText}</span>
+            {!syncing && <span>· 下次自动刷新 {formatCountdown(nextSyncAt)}</span>}
+          </div>
         </div>
 
-        <SegGroup>
-          <span className="border-r border-[var(--border-soft)] px-2 py-1 text-[11px] text-[var(--text-3)]">
-            范围
-          </span>
-          {RANGES.map((r) => (
-            <SegBtn key={r.key} active={range === r.key} onClick={() => onRangeChange(r.key)}>
-              {r.label}
-            </SegBtn>
-          ))}
-        </SegGroup>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Segmented label="类型">
+            {FILTERS.map((item) => (
+              <SegmentButton
+                key={item.key}
+                active={filter === item.key}
+                onClick={() => onFilterChange(item.key)}
+              >
+                {item.label}
+              </SegmentButton>
+            ))}
+          </Segmented>
 
-        {onFullSync && (
+          <div className="control-surface flex items-center gap-1.5 rounded-md px-2.5 py-1.5">
+            <Calendar size={13} className="text-[var(--text-3)]" />
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => onDateChange(event.target.value)}
+              className="theme-date-input min-w-[128px] bg-transparent text-[13px] outline-none"
+              title="选择统计截止日期"
+            />
+          </div>
+
+          <Segmented label="范围">
+            {RANGES.map((item) => (
+              <SegmentButton
+                key={item.key}
+                active={range === item.key}
+                onClick={() => onRangeChange(item.key)}
+              >
+                {item.label}
+              </SegmentButton>
+            ))}
+          </Segmented>
+
           <button
             className="btn"
-            onClick={onFullSync}
-            disabled={rescanning}
-            title="一次性同步过去 365 天的所有消息到本地数据库"
+            onClick={onInitialSync}
+            disabled={syncing}
+            title="重新检查会话目录，并继续补齐最近 2 小时与今日消息"
           >
             <Database size={13} />
-            <span>全量同步</span>
+            继续补齐今天
           </button>
-        )}
-
-        <button
-          className={`btn ${rescanning ? 'btn-warn' : 'btn-primary'}`}
-          onClick={onRescan}
-          disabled={rescanning}
-        >
-          <RefreshCw size={13} className={rescanning ? 'animate-spin' : ''} />
-          <span>{rescanning ? '同步中…' : '重扫'}</span>
-        </button>
+          <button className="btn btn-primary" onClick={onSync} disabled={syncing}>
+            <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? '同步中' : '立即刷新'}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function SegGroup({ children }: { children: React.ReactNode }) {
+function Segmented({ children, label }: { children: React.ReactNode; label: string }) {
   return (
     <div className="control-surface flex overflow-hidden rounded-md">
+      <span className="border-r border-[var(--border-soft)] px-2 py-1 text-[11px] text-[var(--text-3)]">
+        {label}
+      </span>
       {children}
     </div>
   );
 }
 
-function SegBtn({
+function SegmentButton({
   children,
   active,
   onClick,
 }: {
   children: React.ReactNode;
-  active?: boolean;
-  onClick?: () => void;
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
     <button
+      type="button"
       className={`px-2.5 py-1 text-[12px] transition-colors ${
         active
           ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
@@ -120,4 +144,11 @@ function SegBtn({
       {children}
     </button>
   );
+}
+
+function formatCountdown(nextSyncAt: number) {
+  const remaining = Math.max(0, nextSyncAt - Date.now());
+  const minutes = Math.floor(remaining / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1_000);
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }

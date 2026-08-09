@@ -1,13 +1,57 @@
 # Security
 
-## Reporting
+## 安全模型
 
-Please open a GitHub security advisory or a private issue if you find a vulnerability.
+WeChat Dashboard 面向单用户 macOS 本机环境，保护目标是避免聊天数据被意外写入仓库、暴露给局域网、以明文落盘或通过项目代码发送到外部服务。
 
-## Local data
+它不提供针对以下情况的强隔离：
 
-The most sensitive asset is your local SQLite database. Keep it outside synced folders and do not publish it. The default path is `~/.wechat-radar/radar.db`.
+- 已取得同一 macOS 用户权限的恶意进程；
+- 能读取当前用户 Keychain 或附加本机进程的调试工具；
+- 能访问 Dashboard 页面内容的浏览器扩展、屏幕录制或远程控制软件；
+- 已取得磁盘完整访问权限或管理员权限的攻击者。
 
-## Command execution
+## 已实现的控制
 
-The app invokes `wx` via `child_process.execFile` with argument arrays. Avoid changing this to shell string execution.
+- Next.js 只监听 `127.0.0.1`，代理层拒绝非 loopback 主机请求。
+- 写 API 校验同源请求，并返回 `no-store`、CSP、frame 限制和其他安全响应头。
+- `wx` 只通过 `child_process.execFile` 和命令白名单调用，不拼接 shell 字符串。
+- SQLite 使用 prepared statements。
+- 会话名称、摘要、发送者和正文采用 AES-256-GCM 字段级加密。
+- 优先关键词采用 AES-256-GCM 加密；群聊星标只保存为本机关系元数据。关键词新增、删除和星标变更均通过同源写 API。
+- 主密钥由 macOS Keychain 保存；测试环境变量只允许显式提供合法的 32 字节 key。
+- Dashboard 数据根目录固定为当前用户的 `~/.wechat-dashboard`，不接受运行时重定向；目录必须由当前用户所有、必须是普通目录且不能是符号链接。
+- 数据目录为 `0700`，数据库、WAL、SHM、配置、备份和读取器缓存文件为 `0600`；应用在打开配置或数据库前拒绝符号链接、非普通文件和其他用户拥有的路径。
+- Dashboard 固定首次配置时识别的活跃账号；发现账号目录变化后停止同步。
+- 同步任务使用数据库锁，防止多个浏览器标签页并发扫描同一批数据。
+- 错误记录只保存标准化错误码，不把聊天正文或数据库密钥写入日志。
+- 智能分析导出只包含当天群聊并设置群数、单群消息数、总消息数和单条长度上限。
+- 群聊搜索只在本机对当前统计区间做有界解密匹配，单次最多扫描 10,000 条消息、每群最多 200,000 字符；搜索词不写入数据库或日志。
+- 每个分析任务使用随机一次性令牌、30 分钟有效期和 SHA-256 令牌摘要；数据库不保存明文令牌。
+- 每条模型结论必须引用匿名 evidence ID；导入端校验证据属于该任务和指定群，拒绝跨群或伪造证据。
+- 模型输出使用 Zod 做长度、枚举、数量和置信度校验，分析正文与建议动作继续使用 AES-256-GCM 加密。
+- Skill 桥接器拒绝任何非 loopback URL，临时明文文件权限为 `0600`，成功导入后删除。
+- 按需服务使用随机 session ID、短租约和页面心跳；过期的页面租约或 Skill 租约不能被心跳复活，失败的本机读取至少等待 30 分钟才会由页面心跳再次尝试；没有 LaunchAgent 或常驻调度器。
+- 停止命令在发送信号前核验项目路径、supervisor PID、会话 ID 和实际命令行，拒绝终止不匹配的进程。
+
+本机 API 没有额外登录认证。任何能以当前用户身份访问 `127.0.0.1:3000` 的本地进程，都可能读取 Dashboard 返回的数据；loopback 绑定主要阻止局域网和公网访问。写 API 还要求同源 Origin，分析结果导入额外要求未过期的一次性任务令牌。
+
+## 读取器与微信
+
+- 读取器版本固定为 `@jackwener/wx-cli` 0.3.0。
+- `pnpm reader:inspect` 会输出实际二进制路径、大小和 SHA-256，便于升级前后核对。
+- 已有有效 `~/.wx-cli/all_keys.json` 时不要运行 `wx init`。
+- Dashboard 不负责重签微信、关闭 SIP、启动 Frida、重启微信或重新登录账号。
+- 微信升级、重装或切换账号后，先停止 Dashboard，同步备份当前读取器状态，再做一次受控验证。
+
+## 开发要求
+
+- 不在源码、环境样例、测试 fixture、文档、commit 或 Issue 中写入真实密码、key、联系人、聊天正文和账号绝对目录。
+- 不把 `.local-debug/`、`~/.wx-cli`、`~/.wechat-dashboard`、`*.db*`、真实日志或截图加入 Git。
+- 扩大模型上下文范围、新增外部请求、消息发送能力、账号自动化或权限提升前，必须单独评审并取得用户明确授权。
+- 修改加密、Keychain、读取器调用、代理层或数据迁移后，必须做针对性安全审查。
+- 不得把按需会话重新改成默认常驻服务；新增后台调度必须单独取得用户明确授权。
+
+## 漏洞报告
+
+该仓库为私人内测仓库。发现安全问题时，请通过私有 GitHub Security Advisory 或与仓库所有者的私密渠道报告，不要在公开 Issue 中附带真实环境信息。
