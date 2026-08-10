@@ -1,6 +1,6 @@
 {
   "name": "wechat-dashboard",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "packageManager": "pnpm@11.16.0",
   "scripts": {
@@ -15,6 +15,7 @@
     "service:uninstall": "node scripts/install-dashboard-service.mjs --uninstall",
     "skill:check": "node scripts/install-agent-skills.mjs --check",
     "skill:install": "node scripts/install-agent-skills.mjs",
+    "package:shushu": "node scripts/package-shushu.mjs",
     "session:start": "node skills/wechat-dashboard/scripts/dashboard-bridge.mjs start",
     "session:status": "node skills/wechat-dashboard/scripts/dashboard-bridge.mjs status",
     "session:stop": "node skills/wechat-dashboard/scripts/dashboard-bridge.mjs stop",

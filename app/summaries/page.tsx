@@ -79,23 +79,21 @@ export default function SummariesPage() {
   return (
     <div className="flex h-screen bg-[var(--bg)]">
       <Sidebar />
-      <main id="main-content" className="min-w-0 flex-1 overflow-y-auto">
-        <header className="app-topbar sticky top-0 z-10 border-b border-[var(--border-soft)] px-6 py-4">
+      <main id="main-content" className="modern-page">
+        <header className="modern-page-header">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-start gap-3">
-              <div className="rounded-md bg-[var(--accent-soft)] p-2 text-[var(--accent)]">
-                <FileText size={19} />
-              </div>
+              <FileText size={18} className="mt-1 text-[var(--accent)]" />
               <div>
                 <div className="report-kicker">30 Min · Agent Intelligence</div>
-                <h1 className="mt-1 text-[21px] font-semibold">群聊汇总</h1>
-                <p className="mt-1 text-[12px] text-[var(--text-3)]">
+                <h1>群聊汇总</h1>
+                <p>
                   各个群聊独立汇总；Skill 运行且页面打开时，每 30 分钟由当前分析引擎更新当天进展。
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <label className="control-surface flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] text-[var(--text-2)]">
+              <label className="date-control">
                 <CalendarDays size={14} />
                 <input
                   type="date"
@@ -112,7 +110,7 @@ export default function SummariesPage() {
           </div>
         </header>
 
-        <div className="mx-auto max-w-6xl px-6 py-5">
+        <div className="modern-page-body">
           <StatusStrip data={data} />
           {error && (
             <div className="mt-4 rounded-md bg-[var(--danger-soft)] px-4 py-3 text-[13px] text-[var(--danger)]">
@@ -122,7 +120,7 @@ export default function SummariesPage() {
           {!loading && data?.summaries.length === 0 ? (
             <EmptyState />
           ) : (
-            <div className="mt-4 space-y-4">
+            <div className="summary-list">
               {data?.summaries.map((summary) => (
                 <GroupSummaryCard key={summary.group_id} summary={summary} />
               ))}
@@ -136,7 +134,7 @@ export default function SummariesPage() {
 
 function StatusStrip({ data }: { data: SummaryResponse | null }) {
   return (
-    <div className="card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div className="engine-strip">
       <div className="flex items-center gap-2 text-[13px] text-[var(--text-2)]">
         <BrainCircuit size={15} className="text-[var(--accent)]" />
         <span>分析引擎：{data?.intelligence?.display_model ?? '等待首次分析'}</span>
@@ -152,10 +150,10 @@ function StatusStrip({ data }: { data: SummaryResponse | null }) {
 
 function GroupSummaryCard({ summary }: { summary: SummaryItem }) {
   return (
-    <article className="card overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-soft)] px-5 py-4">
+    <article className="summary-article">
+      <div className="summary-article-header">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="rounded-md bg-[var(--surface-2)] p-2 text-[var(--accent)]">
+          <div className="summary-group-icon">
             <MessagesSquare size={17} />
           </div>
           <div className="min-w-0">
@@ -169,9 +167,9 @@ function GroupSummaryCard({ summary }: { summary: SummaryItem }) {
           {summary.analysis_model}
         </span>
       </div>
-      <div className="px-5 py-4">
-        <p className="text-[14px] leading-7 text-[var(--text-2)]">{summary.overview}</p>
-        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div>
+        <p className="summary-overview">{summary.overview}</p>
+        <div className="summary-quadrants">
           <SummarySection icon={<Sparkles size={14} />} title="重要进展" items={summary.highlights} />
           <SummarySection icon={<CheckCircle2 size={14} />} title="结论与决定" items={summary.decisions} />
           <ActionSection items={summary.action_items} />
@@ -200,15 +198,15 @@ function SummarySection({
 }) {
   if (items.length === 0) return null;
   return (
-    <section className={`rounded-md p-3 ${tone === 'warn' ? 'bg-[var(--warn-soft)]' : 'bg-[var(--surface-2)]'}`}>
-      <h3 className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-2)]">
+    <section className={`summary-quadrant ${tone === 'warn' ? 'summary-quadrant-warn' : ''}`}>
+      <h3>
         {icon}
         {title}
       </h3>
-      <ul className="mt-2 space-y-1.5 text-[13px] leading-relaxed text-[var(--text-2)]">
+      <ul>
         {items.map((item, index) => (
-          <li key={`${item}-${index}`} className="flex gap-2">
-            <span className="mt-[7px] size-1 shrink-0 rounded-full bg-[var(--accent)]" />
+          <li key={`${item}-${index}`}>
+            <span className="summary-bullet" />
             <span>{item}</span>
           </li>
         ))}
@@ -220,12 +218,12 @@ function SummarySection({
 function ActionSection({ items }: { items: SummaryItem['action_items'] }) {
   if (items.length === 0) return null;
   return (
-    <section className="rounded-md bg-[var(--surface-2)] p-3">
-      <h3 className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-2)]">
+    <section className="summary-quadrant">
+      <h3>
         <ListTodo size={14} />
         待办事项
       </h3>
-      <ul className="mt-2 space-y-2 text-[13px] text-[var(--text-2)]">
+      <ul className="action-list">
         {items.map((item, index) => (
           <li key={`${item.text}-${index}`}>
             <div>{item.text}</div>
@@ -245,7 +243,7 @@ function ActionSection({ items }: { items: SummaryItem['action_items'] }) {
 
 function EmptyState() {
   return (
-    <div className="card mt-4 flex flex-col items-center px-6 py-14 text-center">
+    <div className="modern-empty">
       <BrainCircuit size={28} className="text-[var(--accent)]" />
       <h2 className="mt-3 text-[16px] font-semibold">等待 Codex 生成今日群聊汇总</h2>
       <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-[var(--text-3)]">

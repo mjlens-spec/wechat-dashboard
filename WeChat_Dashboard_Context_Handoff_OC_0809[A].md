@@ -19,7 +19,7 @@
 - 旧 Codex Automation `wechat-dashboard` 已删除，不再创建任何 Automation、cron 或后台语义调度。
 - Dashboard 已新增“群聊汇总”和“重点关注提示”两个独立入口。群聊汇总严格按群分开，不做跨群合并。
 - 总览已新增“优先群聊”工作区：群聊可星标置顶；加密优先关键词命中群名或当前统计区间消息时自动前置；定向搜索同时覆盖群名和本机区间消息。排序固定为星标、关键词命中数、消息量、最近活跃时间。
-- UI 已迁移到本机 `/Users/lensmiao/Desktop/CCworks/Lens Design` 的默认 Slate & Wine 视觉语言：孔雀蓝 `#1F566B`、酒红 `#8E3B46`、金色 `#B0883E`、冷灰纸面与 2 / 6 / 12px 圆角。按用户要求，标题与正文只使用系统黑体和通用 sans-serif，不加载特殊品牌衬线字体。
+- UI 已迁移到 Lens Design 的 Slate & Wine 视觉语言，并按 `WeChat Dashboard · Modernist 改造.dc.html` 定稿完成结构升级：孔雀蓝 `#1F566B`、酒红 `#8E3B46`、金色 `#B0883E`、冷灰纸面、2px 模块分割线、1px 行分割线、直角组件和无阴影层级。标题与正文只使用系统黑体和通用 sans-serif，不加载特殊品牌字体。
 - 首次真实 Luna Max 循环已成功导入 6 个不同群的 6 份汇总和 1 条重点关注提示；证据归属、解密回读和密文落盘均通过验证。
 - 旧 macOS LaunchAgent `com.mjlens.wechat-dashboard` 已卸载。Dashboard 现在由 Skill 启动带双重上限的临时 production 服务：任意页面每分钟发送本机心跳，并在 30 分钟同步到期时触发本机增量读取；心跳不能复活已经过期的页面租约或 Skill 租约，失败的读取任务至少退避 30 分钟；所有页面关闭后约 3 分钟自动退出，任务结束前还会停止服务或把查看宽限缩短到 10 分钟。
 - Luna Max 已完成两轮真实分析；每轮均导入 6 个不同群的独立汇总和 1 条提示。Terra Max 回退也已完成真实契约和导入验收，随后已用 Luna 结果恢复提示页面。

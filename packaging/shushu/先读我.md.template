@@ -1,0 +1,46 @@
+# 微信监督管理 for 舒舒
+
+这是 WeChat Dashboard v{{VERSION}} 的 macOS 内测移交包，对应 Git 提交 `{{COMMIT}}`。
+
+它包含完整项目源码、锁定的依赖清单、Codex / Claude Code Skill、安装脚本、安全校验脚本和首次连接说明。它不包含 Lens 的微信数据库、聊天正文、联系人、账号目录、密钥、密码、Keychain 内容、日志或本机编译缓存。
+
+## 最快安装方法
+
+1. 把整个“微信监督管理 for 舒舒”文件夹放到准备长期保留的位置，例如 `~/Documents/WeChat-Dashboard`。安装后不要移动其中的 `WeChat-Dashboard` 文件夹，因为 Agent Skill 会链接到这个目录。
+2. 确认微信 Mac 版已经正常登录。安装过程不会退出、重启、重签或修改微信。
+3. 双击 `安装并启动.command`。如果 macOS 阻止直接运行，可以右键该文件并选择“打开”，或者在 Terminal 中运行：
+
+   ```bash
+   chmod +x "安装并启动.command"
+   ./安装并启动.command
+   ```
+
+4. 安装完成后，打开 Codex，输入 `$wechat-dashboard`；在 Claude Code 中输入 `/wechat-dashboard`。Skill 会自动启动临时本机服务并打开 Dashboard。
+5. 第一次进入 Dashboard 时，按照 `/setup` 页面完成本机隐私确认和昵称设置。
+
+## 必须理解的边界
+
+- 代码和 Skill 可以直接迁移；微信数据库密钥与账号目录必须在这台 Mac 上单独配置。
+- 安装脚本会安装项目依赖、构建 Dashboard，并把 Skill 安装到当前用户的 Codex 与 Claude Code Skill 目录。
+- 项目只监听 `127.0.0.1`，不会开放局域网或公网访问。
+- Agent 只分析群聊；私信不会进入模型上下文。
+- Dashboard 按需启动，不安装 LaunchAgent、cron 或永久后台任务。
+- 这一版采用 Lens Design · Slate & Wine 的 Modernist 界面；使用系统黑体、直角组件和无阴影层级。
+- 当前真实读取链路实测于 macOS Apple Silicon、微信 Mac 版 4.1.11。Intel Mac 和其他微信版本需要逐机验证读取器兼容性。
+
+## 如果真实微信数据还没有接通
+
+先阅读 `对方首次连接微信.md`。可以先在 `/setup` 选择示例数据检查界面。真实模式要求这台 Mac 自己的 `wx-cli` 读取器、daemon 和密钥映射就绪；安装脚本不会运行 `wx init`，也不会修改微信。
+
+## 给 Codex 的建议开场 Prompt
+
+> 请进入这个移交包中的 WeChat-Dashboard，先阅读 README.md 和 skills/wechat-dashboard/SKILL.md，运行安装与安全检查。在不重启、不重签、不退出微信的前提下，只配置这台 Mac 自己的 wx-cli 读取环境。完成后安装 Skill，并调用 $wechat-dashboard。遇到本机密钥未就绪时暂停，明确告诉我需要进行哪一个低频、一次性的操作，不要反复重启或登录微信。
+
+## 目录
+
+- `WeChat-Dashboard/`：完整项目源码与 Skill。
+- `安装并启动.command`：安装依赖、构建项目、安装 Agent Skill、启动本机 Dashboard。
+- `检查安装.command`：只做检查，不修改微信。
+- `对方首次连接微信.md`：真实数据接入说明。
+- `移交清单.md`：版本、依赖与排除项。
+- `SHA256SUMS.txt`：包内文件完整性清单。

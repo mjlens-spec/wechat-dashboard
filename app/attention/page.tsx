@@ -110,23 +110,21 @@ export default function AttentionPage() {
   return (
     <div className="flex h-screen bg-[var(--bg)]">
       <Sidebar />
-      <main id="main-content" className="min-w-0 flex-1 overflow-y-auto">
-        <header className="app-topbar sticky top-0 z-10 border-b border-[var(--border-soft)] px-6 py-4">
+      <main id="main-content" className="modern-page">
+        <header className="modern-page-header">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-start gap-3">
-              <div className="rounded-md bg-[var(--accent-soft)] p-2 text-[var(--accent)]">
-                <BellRing size={19} />
-              </div>
+              <BellRing size={18} className="mt-1 text-[var(--accent)]" />
               <div>
                 <div className="report-kicker">30 Min · Agent Intelligence</div>
-                <h1 className="mt-1 text-[21px] font-semibold">重点关注提示</h1>
-                <p className="mt-1 text-[12px] text-[var(--text-3)]">
+                <h1>重点关注提示</h1>
+                <p>
                   聚焦需要你留意或介入的群聊信息，普通闲聊不会进入提示。
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <label className="control-surface flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] text-[var(--text-2)]">
+              <label className="date-control">
                 <CalendarDays size={14} />
                 <input
                   type="date"
@@ -143,8 +141,8 @@ export default function AttentionPage() {
           </div>
         </header>
 
-        <div className="mx-auto max-w-6xl px-6 py-5">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="attention-body">
+          <div className="attention-counts">
             <CountCard icon={<BellRing size={16} />} label="待关注" value={data?.counts.open ?? 0} />
             <CountCard icon={<ShieldAlert size={16} />} label="最高优先" value={(data?.counts.critical ?? 0) + (data?.counts.high ?? 0)} tone="danger" />
             <CountCard icon={<AtSign size={16} />} label="@ 我的信息" value={data?.counts.mentions ?? 0} />
@@ -156,12 +154,12 @@ export default function AttentionPage() {
             />
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-1 rounded-md bg-[var(--surface-2)] p-1">
+          <div className="attention-toolbar">
+            <div className="attention-tabs">
               {(['open', 'handled', 'dismissed'] as AttentionStatus[]).map((status) => (
                 <button
                   key={status}
-                  className={`rounded px-3 py-1.5 text-[12px] ${filter === status ? 'bg-[var(--surface)] text-[var(--text)] shadow-sm' : 'text-[var(--text-3)]'}`}
+                  className={filter === status ? 'attention-tab-active' : ''}
                   onClick={() => setFilter(status)}
                 >
                   {{ open: '待关注', handled: '已处理', dismissed: '已忽略' }[status]}
@@ -179,7 +177,7 @@ export default function AttentionPage() {
           {!loading && visible.length === 0 ? (
             <EmptyState filter={filter} />
           ) : (
-            <div className="mt-4 space-y-3">
+            <div className="attention-list">
               {visible.map((alert) => (
                 <AttentionCard key={alert.id} alert={alert} onStatus={updateStatus} />
               ))}
@@ -193,7 +191,7 @@ export default function AttentionPage() {
 
 function CountCard({ icon, label, value, tone = 'normal', text = false }: { icon: React.ReactNode; label: string; value: number | string; tone?: 'normal' | 'danger'; text?: boolean }) {
   return (
-    <div className="card px-4 py-3">
+    <div className={`attention-count ${tone === 'danger' ? 'attention-count-danger' : ''}`}>
       <div className={`flex items-center gap-1.5 text-[11px] ${tone === 'danger' ? 'text-[var(--danger)]' : 'text-[var(--text-3)]'}`}>{icon}{label}</div>
       <div className={`mt-2 font-semibold ${text ? 'text-[16px]' : 'text-[25px]'}`}>{value}</div>
     </div>
@@ -203,34 +201,36 @@ function CountCard({ icon, label, value, tone = 'normal', text = false }: { icon
 function AttentionCard({ alert, onStatus }: { alert: AttentionItem; onStatus: (id: string, status: AttentionStatus) => Promise<void> }) {
   const isUrgent = alert.severity === 'critical' || alert.severity === 'high';
   return (
-    <article className={`card overflow-hidden border-l-[3px] ${isUrgent ? 'border-l-[var(--danger)]' : 'border-l-[var(--accent)]'}`}>
-      <div className="px-5 py-4">
+    <article className={`attention-article ${isUrgent ? 'attention-article-urgent' : ''}`}>
+      <div className="attention-stripe" />
+      <div className="attention-copy">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
-            <div className={`mt-0.5 rounded-md p-2 ${isUrgent ? 'bg-[var(--danger-soft)] text-[var(--danger)]' : 'bg-[var(--accent-soft)] text-[var(--accent)]'}`}>
-              {categoryIcon(alert.category)}
-            </div>
+            <div className="attention-category-icon">{categoryIcon(alert.category)}</div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[10px] text-[var(--text-3)]">{CATEGORY_LABELS[alert.category]}</span>
                 <span className={`text-[10px] font-semibold uppercase ${isUrgent ? 'text-[var(--danger)]' : 'text-[var(--accent)]'}`}>{severityLabel(alert.severity)}</span>
               </div>
-              <h2 className="mt-2 text-[16px] font-semibold">{alert.title}</h2>
+              <h2>{alert.title}</h2>
               <div className="mt-1 text-[11px] text-[var(--text-3)]">{alert.group_name} · {formatTime(alert.last_detected_at)} · {alert.evidence_count} 条证据</div>
             </div>
           </div>
-          {alert.status === 'open' && (
-            <div className="flex gap-1">
-              <button className="btn" onClick={() => void onStatus(alert.id, 'handled')}><CheckCircle2 size={13} />已处理</button>
-              <button className="btn" onClick={() => void onStatus(alert.id, 'dismissed')}><X size={13} />忽略</button>
-            </div>
-          )}
         </div>
-        <p className="mt-4 text-[13px] leading-6 text-[var(--text-2)]">{alert.detail}</p>
-        <div className="mt-3 flex items-start gap-2 rounded-md bg-[var(--surface-2)] px-3 py-2 text-[12px] leading-relaxed text-[var(--text-2)]">
+        <p className="attention-detail">{alert.detail}</p>
+        <div className="attention-action-note">
           <CircleAlert size={13} className="mt-0.5 shrink-0 text-[var(--accent)]" />
           <span><strong className="font-semibold">建议动作：</strong>{alert.suggested_action}</span>
         </div>
+      </div>
+      <div className="attention-actions">
+        {alert.status === 'open' && (
+          <>
+            <button className={`btn ${isUrgent ? 'btn-primary' : ''}`} onClick={() => void onStatus(alert.id, 'handled')}><CheckCircle2 size={13} />已处理</button>
+            <button className="btn" onClick={() => void onStatus(alert.id, 'dismissed')}><X size={13} />忽略</button>
+          </>
+        )}
+        <span>置信度 {alert.confidence.toFixed(2)}</span>
       </div>
     </article>
   );
@@ -238,7 +238,7 @@ function AttentionCard({ alert, onStatus }: { alert: AttentionItem; onStatus: (i
 
 function EmptyState({ filter }: { filter: AttentionStatus }) {
   return (
-    <div className="card mt-4 flex flex-col items-center px-6 py-14 text-center">
+    <div className="modern-empty">
       <BellRing size={28} className="text-[var(--accent)]" />
       <h2 className="mt-3 text-[16px] font-semibold">{{ open: '目前没有待关注提示', handled: '还没有已处理提示', dismissed: '还没有已忽略提示' }[filter]}</h2>
       <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-[var(--text-3)]">

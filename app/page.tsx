@@ -1,17 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import Link from 'next/link';
+import { Database, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
-import TopBar, {
-  type ConversationFilter,
-  type RangeKey,
-} from '@/components/TopBar';
-import StatGrid, { type CardsData } from '@/components/StatGrid';
-import TrendChart, { type TrendPoint } from '@/components/TrendChart';
-import CoveragePanel, { type CoverageData } from '@/components/CoveragePanel';
+import TopBar, { type ConversationFilter, type RangeKey } from '@/components/TopBar';
+import type { CardsData } from '@/components/StatGrid';
+import type { TrendPoint } from '@/components/TrendChart';
+import type { CoverageData } from '@/components/CoveragePanel';
 import PriorityWorkspace, {
   type PriorityWorkspaceData,
 } from '@/components/PriorityWorkspace';
+import OverviewCockpit, {
+  type OverviewAttentionData,
+} from '@/components/OverviewCockpit';
 
 const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -53,11 +55,12 @@ type SyncRun = {
 
 export default function Page() {
   const [range, setRange] = useState<RangeKey>('week');
-  const [filter, setFilter] = useState<ConversationFilter>('group');
+  const filter: ConversationFilter = 'group';
   const [date, setDate] = useState(localToday);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [attention, setAttention] = useState<OverviewAttentionData | null>(null);
   const [setupChecked, setSetupChecked] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [prioritySaving, setPrioritySaving] = useState(false);
@@ -88,13 +91,20 @@ export default function Page() {
   }, []);
 
   const reload = useCallback(async () => {
-    const response = await fetch(
-      `/api/dashboard?range=${range}&date=${date}&type=${filter}&q=${encodeURIComponent(activeQuery)}`,
-      { cache: 'no-store' },
-    );
-    const data = (await response.json()) as DashboardResponse;
+    const [response, attentionResponse] = await Promise.all([
+      fetch(
+        `/api/dashboard?range=${range}&date=${date}&type=${filter}&q=${encodeURIComponent(activeQuery)}`,
+        { cache: 'no-store' },
+      ),
+      fetch(`/api/attention?date=${date}`, { cache: 'no-store' }),
+    ]);
+    const [data, attentionData] = await Promise.all([
+      response.json() as Promise<DashboardResponse>,
+      attentionResponse.json() as Promise<OverviewAttentionData & { ok?: boolean }>,
+    ]);
     if (!response.ok || !data.ok) throw new Error(data.error || 'Dashboard load failed');
     setDashboard(data);
+    if (attentionResponse.ok && attentionData.ok !== false) setAttention(attentionData);
     setNextSyncAt(
       data.source.last_success_at
         ? data.source.last_success_at + data.source.auto_sync_interval_ms
@@ -222,10 +232,8 @@ export default function Page() {
       <main id="main-content" className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar
           range={range}
-          filter={filter}
           date={date}
           onRangeChange={setRange}
-          onFilterChange={setFilter}
           onDateChange={setDate}
           syncing={syncing || Boolean(dashboard?.source.syncing)}
           onSync={() => void syncNow('latest')}
@@ -234,18 +242,23 @@ export default function Page() {
           nextSyncAt={nextSyncAt}
         />
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="mx-auto w-full max-w-[1440px]">
-            <StatGrid
+        <div className="dashboard-scroll flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1600px]">
+            <DashboardStateNotice
+              source={dashboard?.source}
+              onSync={() => void syncNow('latest')}
+              onBootstrap={() => void syncNow('bootstrap')}
+            />
+            <OverviewCockpit
               cards={dashboard?.cards}
               days={dashboard?.window.days ?? 7}
+              coverage={dashboard?.coverage}
+              priorities={dashboard?.priority_workspace}
+              attention={attention}
               lastSuccessAt={dashboard?.source.last_success_at ?? null}
               stale={dashboard?.source.stale ?? true}
             />
-            <div className="mt-4">
-              <CoveragePanel coverage={dashboard?.coverage} />
-            </div>
-            <div className="mt-4">
+            <div id="priority-workspace" className="priority-workspace-wrap">
               <PriorityWorkspace
                 data={dashboard?.priority_workspace}
                 days={dashboard?.window.days ?? 7}
@@ -266,12 +279,6 @@ export default function Page() {
                 }
                 saving={prioritySaving}
               />
-            </div>
-            <div className="mt-4">
-              <TrendChart data={dashboard?.trend ?? []} />
-            </div>
-            <div className="mt-4 pb-2 text-center text-[11px] text-[var(--text-3)]">
-              数据源：本机微信 Mac 客户端 · SQLite 快照只保存在本机 · 页面打开时每 30 分钟刷新
             </div>
           </div>
         </div>
@@ -338,4 +345,69 @@ function syncFailureText(code: string | null) {
   if (code === 'ENCRYPTION_KEY_UNAVAILABLE') return '无法访问 macOS Keychain 加密密钥';
   if (code === 'DASHBOARD_NOT_CONFIGURED') return '请先完成本机设置';
   return '本地读取器暂不可用，请打开设置检查状态';
+}
+
+function DashboardStateNotice({
+  source,
+  onSync,
+  onBootstrap,
+}: {
+  source?: DashboardResponse['source'];
+  onSync: () => void;
+  onBootstrap: () => void;
+}) {
+  if (!source || source.kind === 'demo') return null;
+  if (source.syncing) {
+    const run = source.latest_run;
+    const progress = run && run.conversations_total > 0
+      ? Math.min(100, (run.conversations_synced / run.conversations_total) * 100)
+      : 12;
+    return (
+      <div className="dashboard-state dashboard-state-syncing">
+        <div>
+          <RefreshCw size={14} className="animate-spin" />
+          <strong>{run ? syncProgressText(run) : '正在读取本地微信消息'}</strong>
+          <span>同步在本机后台运行，可以继续浏览页面。</span>
+        </div>
+        <div className="dashboard-state-progress"><span style={{ width: `${progress}%` }} /></div>
+      </div>
+    );
+  }
+  if (source.latest_run?.status === 'failed') {
+    return (
+      <div className="dashboard-state dashboard-state-danger">
+        <ShieldAlert size={15} />
+        <div>
+          <strong>{syncFailureText(source.latest_run.error_code)}</strong>
+          <span>现有本机快照已保留；处理前不会继续写入。</span>
+        </div>
+        <Link href="/setup" className="btn btn-primary">打开本机设置</Link>
+      </div>
+    );
+  }
+  if (source.bootstrap_required) {
+    return (
+      <div className="dashboard-state">
+        <Database size={15} />
+        <div>
+          <strong>等待首次真实数据同步</strong>
+          <span>首次只建立会话目录，再补齐最近 2 小时与今日消息。</span>
+        </div>
+        <button className="btn btn-primary" onClick={onBootstrap}>建立本地快照</button>
+      </div>
+    );
+  }
+  if (source.stale) {
+    return (
+      <div className="dashboard-state dashboard-state-danger">
+        <WifiOff size={15} />
+        <div>
+          <strong>已超过 60 分钟未同步</strong>
+          <span>当前数字可能不完整，请检查读取器状态或立即刷新。</span>
+        </div>
+        <button className="btn btn-primary" onClick={onSync}>立即刷新</button>
+      </div>
+    );
+  }
+  return null;
 }

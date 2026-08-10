@@ -1,0 +1,26 @@
+#!/bin/zsh
+set -euo pipefail
+
+SCRIPT_DIR="${0:A:h}"
+PROJECT_DIR="$SCRIPT_DIR/WeChat-Dashboard"
+
+function run_check() {
+  print "\n— $1"
+  shift
+  "$@"
+}
+
+[[ "$(uname -s)" == "Darwin" ]] || { print -u2 "只支持 macOS。"; exit 1; }
+[[ -f "$PROJECT_DIR/package.json" ]] || { print -u2 "找不到完整项目。"; exit 1; }
+
+cd "$PROJECT_DIR"
+run_check "Node.js" node --version
+run_check "pnpm" pnpm --version
+run_check "读取器" pnpm reader:inspect
+run_check "私有路径" pnpm security:verify
+run_check "会话策略" pnpm session:verify
+run_check "优先级策略" pnpm priority:verify
+run_check "Agent Skill" pnpm skill:check
+
+print "\n检查完成。此脚本没有启动、退出、重签或修改微信。"
+read -r "?按回车关闭窗口…"

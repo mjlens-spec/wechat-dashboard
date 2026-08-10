@@ -155,6 +155,14 @@ Dashboard 数据根目录固定为当前用户的 `~/.wechat-dashboard`，不接
 
 不需要安装 LaunchAgent，也不需要创建 Codex Automation。微信升级、重装或切换账号后，可能需要重新做一次低频、受控的本机读取器验证。
 
+为“舒舒”重新生成脱敏迁移包时，先提交当前代码，再运行：
+
+```bash
+pnpm package:shushu
+```
+
+脚本只打包 Git 已跟踪源码，并自动生成安装说明、检查脚本与 `SHA256SUMS.txt`。输出文件为项目根目录的 `微信监督管理 for 舒舒.zip`；本机数据库、密钥、日志、构建缓存、项目 handoff 和 UI mockup 不会进入包内。
+
 ## 验证
 
 ```bash

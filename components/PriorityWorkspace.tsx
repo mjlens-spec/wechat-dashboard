@@ -1,15 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  KeyRound,
-  MessagesSquare,
-  Pin,
-  Plus,
-  Search,
-  Star,
-  X,
-} from 'lucide-react';
+import { KeyRound, Plus, Search, Star, X } from 'lucide-react';
 
 export type PriorityKeyword = { id: string; keyword: string };
 
@@ -72,27 +64,24 @@ export default function PriorityWorkspace({
   }
 
   return (
-    <section className="card overflow-hidden">
-      <div className="priority-header border-b border-[var(--border-soft)] px-5 py-5">
+    <section className="priority-workspace">
+      <div className="priority-header">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="report-kicker">Priority workspace · 工作权重</div>
-            <h2 className="mt-1.5 flex items-center gap-2 text-[18px] font-semibold tracking-[-0.01em]">
-              <Pin size={17} className="text-[var(--accent)]" />
-              优先群聊
-            </h2>
-            <p className="mt-1.5 max-w-2xl text-[13px] leading-6 text-[var(--text-3)]">
+            <h2>优先群聊</h2>
+            <p>
               星标群始终置顶；优先关键词命中的群聊随后前置，再按当前 {days} 天区间的消息量与活跃时间排序。
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-[var(--border-soft)] bg-[var(--border-soft)] text-center">
+          <div className="priority-metrics">
             <PriorityMetric label="星标" value={data?.counts.starred ?? 0} />
             <PriorityMetric label="关键词命中" value={data?.counts.keyword_matched ?? 0} />
             <PriorityMetric label={searchValue ? '搜索结果' : '群聊总数'} value={searchValue ? (data?.counts.results ?? 0) : (data?.counts.total_groups ?? 0)} />
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.62fr)]">
+        <div className="priority-search-grid">
           <label className="search-field flex min-w-0 items-center gap-2">
             <Search size={16} className="shrink-0 text-[var(--accent)]" />
             <input
@@ -136,8 +125,8 @@ export default function PriorityWorkspace({
           </form>
         </div>
 
-        <div className="mt-3 flex min-h-7 flex-wrap items-center gap-2">
-          <span className="text-[11px] font-medium tracking-[0.08em] text-[var(--text-3)]">
+        <div className="priority-keywords">
+          <span className="priority-keywords-label">
             优先关键词
           </span>
           {data?.keywords.length ? (
@@ -160,14 +149,19 @@ export default function PriorityWorkspace({
             </span>
           )}
         </div>
+        <div className="priority-explanation">
+          星标置顶 → 关键词命中数 → 当前区间消息量 → 最近活跃时间
+        </div>
       </div>
 
       {data?.groups.length ? (
-        <div className="divide-y divide-[var(--border-soft)]">
-          {data.groups.map((group) => (
+        <div className="priority-group-list">
+          {data.groups.map((group, index) => (
             <PriorityGroupRow
               key={group.id}
               group={group}
+              index={index}
+              maxScore={Math.max(1, ...data.groups.map((item) => item.priority_score))}
               saving={saving}
               onToggleStar={onToggleStar}
             />
@@ -200,24 +194,33 @@ export default function PriorityWorkspace({
 
 function PriorityMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="min-w-[88px] bg-[var(--surface)] px-3 py-2.5">
-      <div className="text-[19px] font-semibold tabular-nums text-[var(--text)]">{value}</div>
-      <div className="mt-0.5 text-[10px] tracking-[0.06em] text-[var(--text-3)]">{label}</div>
+    <div className="priority-metric">
+      <strong>{value}</strong>
+      <span>{label}</span>
     </div>
   );
 }
 
 function PriorityGroupRow({
   group,
+  index,
+  maxScore,
   saving,
   onToggleStar,
 }: {
   group: PriorityGroup;
+  index: number;
+  maxScore: number;
   saving: boolean;
   onToggleStar: (groupId: string, starred: boolean) => Promise<void>;
 }) {
   return (
     <article className={`priority-row ${group.starred ? 'priority-row-starred' : ''}`}>
+      <div className={`priority-rank ${index < 2 ? 'rank-accent' : ''}`}>
+        {String(index + 1).padStart(2, '0')}
+      </div>
+      <div className="priority-row-main">
+        <div className="priority-row-heading">
       <button
         type="button"
         className={`star-button ${group.starred ? 'star-button-active' : ''}`}
@@ -229,13 +232,6 @@ function PriorityGroupRow({
       >
         <Star size={16} fill={group.starred ? 'currentColor' : 'none'} />
       </button>
-
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-[var(--border-soft)] bg-[var(--accent-soft)] text-[var(--accent)]">
-        <MessagesSquare size={16} />
-      </div>
-
-      <div className="min-w-0">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h3 className="min-w-0 truncate text-[14px] font-semibold text-[var(--text)]">
             {group.name}
           </h3>
@@ -251,18 +247,19 @@ function PriorityGroupRow({
               {group.search_match_location === 'name' ? '群名命中' : '消息命中'}
             </span>
           )}
+          <strong className="priority-message-count">{group.message_count.toLocaleString()}</strong>
         </div>
-        <p className="mt-1 truncate text-[12px] text-[var(--text-3)]">
+        <div className="score-track score-track-large">
+          <span
+            className={`score-fill ${index < 2 ? 'score-fill-accent' : ''}`}
+            style={{ width: `${Math.max(4, (group.priority_score / maxScore) * 100)}%` }}
+          />
+        </div>
+        <p className="priority-row-summary">
           {group.last_sender ? `${group.last_sender}：` : ''}
           {group.summary || '暂无本地消息摘要'}
+          <span>{group.last_time || '—'}</span>
         </p>
-      </div>
-
-      <div className="min-w-[88px] text-right">
-        <div className="text-[16px] font-semibold tabular-nums text-[var(--text)]">
-          {group.message_count.toLocaleString()}
-        </div>
-        <div className="mt-1 text-[11px] text-[var(--text-3)]">{group.last_time || '—'}</div>
       </div>
     </article>
   );

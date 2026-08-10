@@ -23,14 +23,24 @@ type SyncStatus = {
 export default function Sidebar() {
   const pathname = usePathname();
   const [sync, setSync] = useState<SyncStatus | null>(null);
+  const [openAlerts, setOpenAlerts] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const response = await fetch('/api/sync', { cache: 'no-store' });
-        const data = (await response.json()) as SyncStatus;
-        if (!cancelled) setSync(data);
+        const [syncResponse, attentionResponse] = await Promise.all([
+          fetch('/api/sync', { cache: 'no-store' }),
+          fetch('/api/attention', { cache: 'no-store' }),
+        ]);
+        const [data, attention] = await Promise.all([
+          syncResponse.json() as Promise<SyncStatus>,
+          attentionResponse.json() as Promise<{ counts?: { open?: number } }>,
+        ]);
+        if (!cancelled) {
+          setSync(data);
+          setOpenAlerts(attention.counts?.open ?? 0);
+        }
       } catch {
         if (!cancelled) setSync(null);
       }
@@ -52,29 +62,28 @@ export default function Sidebar() {
         : { label: '等待首次同步', tone: 'var(--text-3)' };
 
   return (
-    <aside className="app-sidebar flex h-screen w-[232px] shrink-0 flex-col border-r border-[var(--border-soft)]">
-      <div className="border-b border-[var(--border-soft)] px-4 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <Link href="/" className="min-w-0">
-            <div className="report-kicker">Local · Private</div>
-            <div className="mt-1 text-[17px] font-semibold tracking-wide text-[var(--text)]">
-              WeChat Dashboard
-            </div>
-          </Link>
+    <aside className="app-sidebar">
+      <div className="sidebar-brand">
+        <div className="flex items-center gap-2">
+          <span className="brand-mark" />
+          <div className="report-kicker">Local · Private</div>
         </div>
-        <div className="mt-2 text-[12px] leading-relaxed text-[var(--text-3)]">
+        <Link href="/" className="sidebar-title">
+          WeChat<br />Dashboard
+        </Link>
+        <div className="sidebar-subtitle">
           macOS 本机只读 · 群聊优先
         </div>
       </div>
 
-      <nav className="space-y-1 px-2 py-3">
+      <nav className="sidebar-nav">
         <NavItem
           href="/"
           icon={<LayoutDashboard size={15} />}
           label="总览"
           active={pathname === '/'}
         />
-        <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-3)]">
+        <div className="sidebar-section-label">
           Codex Intelligence
         </div>
         <NavItem
@@ -88,6 +97,7 @@ export default function Sidebar() {
           icon={<BellRing size={15} />}
           label="重点关注提示"
           active={pathname === '/attention'}
+          badge={openAlerts}
         />
         <NavItem
           href="/setup"
@@ -97,12 +107,12 @@ export default function Sidebar() {
         />
       </nav>
 
-      <div className="mt-auto border-t border-[var(--border-soft)] px-4 py-4">
-        <div className="flex items-center gap-2 text-[12px] text-[var(--text-2)]">
-          <span className="size-2 rounded-full" style={{ background: status.tone }} />
+      <div className="sidebar-status">
+        <div className="sidebar-status-line">
+          <span className="size-2" style={{ background: status.tone }} />
           {status.label}
         </div>
-        <div className="mt-3 flex items-start gap-2 rounded-md bg-[var(--surface-2)] px-3 py-2 text-[11px] leading-relaxed text-[var(--text-3)]">
+        <div className="sidebar-privacy">
           <ShieldCheck size={13} className="mt-0.5 shrink-0 text-[var(--accent)]" />
           服务只监听 127.0.0.1，聊天数据不会由 Dashboard 上传。
         </div>
@@ -116,26 +126,22 @@ function NavItem({
   icon,
   label,
   active,
+  badge,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   active: boolean;
+  badge?: number;
 }) {
   return (
     <Link
       href={href}
-      className={`relative flex items-center gap-2 rounded-md px-3 py-2 text-[14px] transition-colors ${
-        active
-          ? 'bg-[var(--accent-soft)] text-[var(--text)]'
-          : 'text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-      }`}
+      className={`sidebar-nav-item ${active ? 'sidebar-nav-item-active' : ''}`}
     >
-      {active && (
-        <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-[var(--accent)]" />
-      )}
       {icon}
-      {label}
+      <span>{label}</span>
+      {Boolean(badge) && <span className="sidebar-badge">{badge}</span>}
     </Link>
   );
 }
