@@ -152,6 +152,7 @@ function verifyArchiveContents(path) {
   const entries = execFileSync('/usr/bin/unzip', ['-Z1', path], { encoding: 'utf8' })
     .split('\n')
     .filter(Boolean);
+  const normalizedEntries = new Set(entries.map((entry) => entry.normalize('NFC')));
   const required = [
     `${productName}/先读我.md`,
     `${productName}/安装并启动.command`,
@@ -165,7 +166,9 @@ function verifyArchiveContents(path) {
     `${productName}/${projectFolderName}/app/opportunities/page.tsx`,
   ];
   for (const entry of required) {
-    if (!entries.includes(entry)) throw new Error(`Required archive entry missing: ${entry}`);
+    if (!normalizedEntries.has(entry.normalize('NFC'))) {
+      throw new Error(`Required archive entry missing: ${entry}`);
+    }
   }
   for (const entry of entries) {
     const normalized = entry.normalize('NFC');
