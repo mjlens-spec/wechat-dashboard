@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
         {
           status: 'error',
           code: 'INVALID_ANALYSIS_RESULT',
-          error: 'Luna 分析结果不符合 Dashboard 的结构化数据契约。',
+          error: 'Terra High 分析结果不符合 Dashboard 的结构化数据契约。',
         },
         { status: 400 },
       );

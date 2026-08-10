@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   BellRing,
+  BriefcaseBusiness,
   FileText,
   LayoutDashboard,
   Settings2,
@@ -24,22 +25,26 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [openAlerts, setOpenAlerts] = useState(0);
+  const [openOpportunities, setOpenOpportunities] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [syncResponse, attentionResponse] = await Promise.all([
+        const [syncResponse, attentionResponse, opportunityResponse] = await Promise.all([
           fetch('/api/sync', { cache: 'no-store' }),
           fetch('/api/attention', { cache: 'no-store' }),
+          fetch('/api/opportunities', { cache: 'no-store' }),
         ]);
-        const [data, attention] = await Promise.all([
+        const [data, attention, opportunities] = await Promise.all([
           syncResponse.json() as Promise<SyncStatus>,
           attentionResponse.json() as Promise<{ counts?: { open?: number } }>,
+          opportunityResponse.json() as Promise<{ counts?: { new?: number } }>,
         ]);
         if (!cancelled) {
           setSync(data);
           setOpenAlerts(attention.counts?.open ?? 0);
+          setOpenOpportunities(opportunities.counts?.new ?? 0);
         }
       } catch {
         if (!cancelled) setSync(null);
@@ -54,7 +59,7 @@ export default function Sidebar() {
   }, []);
 
   const status = sync?.syncing
-    ? { label: '正在读取本地微信', tone: 'var(--warn)' }
+    ? { label: '正在刷新双端消息', tone: 'var(--warn)' }
     : sync?.latest_run?.status === 'failed'
       ? { label: '读取器需要处理', tone: 'var(--danger)' }
       : sync?.latest_run
@@ -69,10 +74,10 @@ export default function Sidebar() {
           <div className="report-kicker">Local · Private</div>
         </div>
         <Link href="/" className="sidebar-title">
-          WeChat<br />Dashboard
+          Chat<br />Dashboard
         </Link>
         <div className="sidebar-subtitle">
-          macOS 本机只读 · 群聊优先
+          微信 × 飞书 · 本机加密
         </div>
       </div>
 
@@ -89,8 +94,15 @@ export default function Sidebar() {
         <NavItem
           href="/summaries"
           icon={<FileText size={15} />}
-          label="群聊汇总"
+          label="会话汇总"
           active={pathname === '/summaries'}
+        />
+        <NavItem
+          href="/opportunities"
+          icon={<BriefcaseBusiness size={15} />}
+          label="潜在商机提示"
+          active={pathname === '/opportunities'}
+          badge={openOpportunities}
         />
         <NavItem
           href="/attention"
@@ -114,7 +126,7 @@ export default function Sidebar() {
         </div>
         <div className="sidebar-privacy">
           <ShieldCheck size={13} className="mt-0.5 shrink-0 text-[var(--accent)]" />
-          服务只监听 127.0.0.1，聊天数据不会由 Dashboard 上传。
+          服务只监听 127.0.0.1，双端聊天数据均加密保存在本机。
         </div>
       </div>
     </aside>

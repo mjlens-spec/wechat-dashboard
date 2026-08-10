@@ -10,24 +10,36 @@ const databasePath = join(homedir(), '.wechat-dashboard', 'dashboard.db');
 const database = new Database(databasePath, { readonly: true, fileMustExist: true });
 
 try {
-  const [summariesResponse, attentionResponse, summariesPage, attentionPage] =
+  const [
+    summariesResponse,
+    attentionResponse,
+    opportunitiesResponse,
+    summariesPage,
+    attentionPage,
+    opportunitiesPage,
+  ] =
     await Promise.all([
       fetch(new URL('/api/summaries', baseUrl), { cache: 'no-store' }),
       fetch(new URL('/api/attention', baseUrl), { cache: 'no-store' }),
+      fetch(new URL('/api/opportunities', baseUrl), { cache: 'no-store' }),
       fetch(new URL('/summaries', baseUrl), { cache: 'no-store' }),
       fetch(new URL('/attention', baseUrl), { cache: 'no-store' }),
+      fetch(new URL('/opportunities', baseUrl), { cache: 'no-store' }),
     ]);
   if (
     !summariesResponse.ok ||
     !attentionResponse.ok ||
+    !opportunitiesResponse.ok ||
     !summariesPage.ok ||
-    !attentionPage.ok
+    !attentionPage.ok ||
+    !opportunitiesPage.ok
   ) {
     throw new Error('One or more intelligence routes did not return HTTP 200.');
   }
 
   const summaries = await summariesResponse.json();
   const attention = await attentionResponse.json();
+  const opportunities = await opportunitiesResponse.json();
   const groupIds = summaries.summaries.map((item) => item.group_id);
   const distinctGroups = new Set(groupIds);
   if (groupIds.length !== distinctGroups.size) {
@@ -46,6 +58,7 @@ try {
       `SELECT
          (SELECT COUNT(*) FROM group_summaries) AS summaries,
          (SELECT COUNT(*) FROM attention_alerts) AS alerts,
+         (SELECT COUNT(*) FROM business_opportunities) AS opportunities,
          (SELECT COUNT(*) FROM group_summaries
           WHERE overview_cipher NOT LIKE 'v1:%'
              OR highlights_cipher NOT LIKE 'v1:%'
@@ -55,10 +68,19 @@ try {
          (SELECT COUNT(*) FROM attention_alerts
           WHERE title_cipher NOT LIKE 'v1:%'
              OR detail_cipher NOT LIKE 'v1:%'
-             OR suggested_action_cipher NOT LIKE 'v1:%') AS invalid_alert_ciphers`,
+             OR suggested_action_cipher NOT LIKE 'v1:%') AS invalid_alert_ciphers,
+         (SELECT COUNT(*) FROM business_opportunities
+          WHERE title_cipher NOT LIKE 'v1:%'
+             OR detail_cipher NOT LIKE 'v1:%'
+             OR business_value_cipher NOT LIKE 'v1:%'
+             OR suggested_action_cipher NOT LIKE 'v1:%') AS invalid_opportunity_ciphers`,
     )
     .get();
-  if (cipherAudit.invalid_summary_ciphers || cipherAudit.invalid_alert_ciphers) {
+  if (
+    cipherAudit.invalid_summary_ciphers ||
+    cipherAudit.invalid_alert_ciphers ||
+    cipherAudit.invalid_opportunity_ciphers
+  ) {
     throw new Error('Plaintext or invalid analysis fields were found at rest.');
   }
 
@@ -69,17 +91,20 @@ try {
     `${JSON.stringify(
       {
         status: 'verified',
-        summary: 'Intelligence routes, group separation, decryption, and encrypted storage passed.',
+        summary: 'Dual-platform intelligence routes, conversation separation, decryption, and encrypted storage passed.',
         next_actions: [],
         artifacts: [],
         checks: {
           summary_page_http: summariesPage.status,
           attention_page_http: attentionPage.status,
+          opportunities_page_http: opportunitiesPage.status,
           summaries: summaries.summaries.length,
           distinct_summary_groups: distinctGroups.size,
           alerts: attention.alerts.length,
+          opportunities: opportunities.opportunities.length,
           invalid_summary_ciphers: cipherAudit.invalid_summary_ciphers,
           invalid_alert_ciphers: cipherAudit.invalid_alert_ciphers,
+          invalid_opportunity_ciphers: cipherAudit.invalid_opportunity_ciphers,
           database_mode: databaseMode.toString(8),
         },
       },

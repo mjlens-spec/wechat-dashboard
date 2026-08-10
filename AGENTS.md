@@ -1,4 +1,4 @@
-# WeChat Dashboard Agent Guide
+# WeChat × Feishu Dashboard Agent Guide
 
 ## 开始前
 
@@ -7,20 +7,21 @@
 1. `README.md`
 2. `PRIVACY.md`
 3. `SECURITY.md`
-4. `WeChat_Dashboard_Context_Handoff_OC_0809[A].md`
+4. `TRANSFER.md`
+5. 本机存在时再阅读 `WeChat_Dashboard_Context_Handoff_OC_0809[A].md`
 
-当前工作树包含从 WeChat Radar 到 WeChat Dashboard 的大规模未提交改造。不要执行 `git reset --hard`、`git checkout -- .` 或其他会丢弃用户工作的命令。
+工作树可能包含用户或其他 Agent 的并行改动。不要执行 `git reset --hard`、`git checkout -- .` 或其他会丢弃现有工作的命令。
 
 ## 产品不变量
 
 - 只在 macOS 本机运行，只监听 loopback。
-- 只读微信已有会话和消息，不发送、回复、撤回或修改微信数据。
+- 只读微信与飞书已有会话和消息，不发送、回复、撤回或修改两端数据。飞书固定通过 `lark-cli --as user` 读取。
 - 群聊是最高优先级；私信采用尽力读取，持续无法解析时允许标记为 `unsupported`。
 - 项目只在 `$wechat-dashboard` 被调用时按需启动；不得创建 Codex Automation、cron、LaunchAgent 或其他常驻调度器。
 - Dashboard 页面打开时，消息增量同步约 30 分钟一次；Codex 语义分析的 30 分钟循环只能存在于仍在运行的当前任务中。页面关闭或任务结束后停止。
-- Dashboard 服务不直接调用外部模型。只有 WeChat Dashboard Skill 可以把受限的当日群聊上下文带入当前 Codex 或 Claude Code 任务；禁止导出私信、完整数据库、账号目录或密钥。
-- Codex 语义分析首选 Luna Max，Luna 不可用时可回退 Terra Max；Claude Code 使用当前实际模型。结果必须记录实际模型，禁止伪报。
-- 群聊汇总必须逐群独立，重点关注提示必须引用同群 evidence ID 并通过导入校验。
+- Dashboard 服务不直接调用外部模型。只有 WeChat Dashboard Skill 可以把受限的当日会话上下文带入当前 Codex 任务；私信必须由对应平台设置显式开启；禁止导出完整数据库、账号目录或密钥。
+- 语义分析统一使用 `gpt-5.6-terra`、reasoning `high`。模型或推理强度不一致时拒绝导入，不再使用 Luna。
+- 会话汇总、重点关注提示和潜在商机必须逐会话独立，引用同会话 evidence ID 并通过导入校验。
 - 敏感字段必须加密落盘，主密钥保存在 macOS Keychain。
 - 按需停止只能终止项目路径、session ID 和命令行均匹配的 supervisor；不得按端口或模糊进程名批量 kill。
 
@@ -31,6 +32,7 @@
 - 不自动重签微信，不启动 Frida，不关闭 SIP。
 - 如微信升级、重装、切换账号或密钥失效，先停止同步、保护现有状态，再提出一次受控恢复方案。
 - 读取器调用使用 `execFile` 与固定参数，不改为 shell 命令拼接。
+- 飞书凭证只由 `lark-cli` 和 macOS Keychain 管理，不写入 Dashboard 数据库或配置；bot 身份不得作为静默回退。
 
 ## 数据与日志
 

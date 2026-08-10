@@ -10,6 +10,7 @@ import {
   pinActiveWeChatAccount,
 } from '@/lib/wechat-account';
 import { wxAvailable, wxDaemonStatus, wxSessions } from '@/lib/wx';
+import { feishuAuthStatus } from '@/lib/feishu';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,13 +19,17 @@ const SetupSchema = z.object({
   privacyConfirmed: z.boolean(),
   demoMode: z.boolean().default(false),
   defaultSyncDays: z.number().int().min(1).max(30).default(7),
+  feishuEnabled: z.boolean().default(true),
+  analyzeWeChatPrivate: z.boolean().default(false),
+  analyzeFeishuPrivate: z.boolean().default(false),
 });
 
 export async function GET() {
-  const [wxInstalled, daemon, wxReaderReady] = await Promise.all([
+  const [wxInstalled, daemon, wxReaderReady, feishu] = await Promise.all([
     wxAvailable(),
     wxDaemonStatus(),
     wxSessions(1).then(() => true).catch(() => false),
+    feishuAuthStatus(),
   ]);
   const activeAccount = detectActiveWeChatAccount();
   return NextResponse.json({
@@ -38,6 +43,7 @@ export async function GET() {
       wxDaemonPid: daemon.pid ?? null,
       readerCachePrivate: readerCacheIsPrivate(),
       activeAccountDirectory: activeAccount?.accountDirectory ?? null,
+      feishu,
     },
   });
 }
@@ -91,6 +97,9 @@ export async function POST(req: NextRequest) {
     demoMode: parsed.data.demoMode,
     defaultSyncDays: parsed.data.defaultSyncDays,
     autoSyncMinutes: 30,
+    feishuEnabled: parsed.data.feishuEnabled,
+    analyzeWeChatPrivate: parsed.data.analyzeWeChatPrivate,
+    analyzeFeishuPrivate: parsed.data.analyzeFeishuPrivate,
     accountDirectory,
     setupCompleted: true,
   });

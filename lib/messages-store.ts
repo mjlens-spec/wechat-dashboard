@@ -14,6 +14,18 @@ export interface MessageInsertResult {
   skipped: number;
 }
 
+export interface ExternalMessage {
+  sourceMessageId: string;
+  sender: string;
+  content: string;
+  time: string;
+  timestamp: number;
+  type: string;
+  edited?: boolean;
+  deleted?: boolean;
+  sourceUpdatedAt?: number | null;
+}
+
 export interface ConversationSyncState {
   chatroom_id: string;
   last_synced_at: number;
@@ -120,6 +132,85 @@ export function bulkInsertMessages(
         dateOfMessage(message),
       );
       result.inserted += inserted.changes;
+    }
+  })(messages);
+
+  secureDatabaseFiles();
+  return result;
+}
+
+export function bulkUpsertExternalMessages(
+  conversationId: string,
+  messages: ExternalMessage[],
+): MessageInsertResult {
+  const result: MessageInsertResult = {
+    seen: messages.length,
+    inserted: 0,
+    linkedToHistory: 0,
+    skipped: 0,
+  };
+  if (messages.length === 0) return result;
+
+  const upsert = db().prepare(`
+    INSERT INTO messages (
+      chatroom_id, message_id, source_message_id, local_id, fingerprint,
+      sender_cipher, content_cipher, time, timestamp, type, date,
+      edited, deleted, source_updated_at
+    ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(chatroom_id, message_id) DO UPDATE SET
+      sender_cipher = excluded.sender_cipher,
+      content_cipher = excluded.content_cipher,
+      time = excluded.time,
+      timestamp = excluded.timestamp,
+      type = excluded.type,
+      date = excluded.date,
+      edited = excluded.edited,
+      deleted = excluded.deleted,
+      source_updated_at = excluded.source_updated_at
+  `);
+
+  db().transaction((rows: ExternalMessage[]) => {
+    for (const raw of rows) {
+      const sourceMessageId = raw.sourceMessageId.trim().slice(0, 512);
+      const timestamp = Math.trunc(Number(raw.timestamp));
+      if (!sourceMessageId || !Number.isFinite(timestamp) || timestamp <= 0) {
+        result.skipped++;
+        continue;
+      }
+      const sender = typeof raw.sender === 'string' ? raw.sender.slice(0, 2_048) : '';
+      const originalContent = typeof raw.content === 'string' ? raw.content : '';
+      if (originalContent.length > MAX_CONTENT_LENGTH) {
+        result.skipped++;
+        continue;
+      }
+      const content = raw.deleted ? '[消息已撤回]' : originalContent;
+      const type = typeof raw.type === 'string' ? raw.type.slice(0, 64) : '';
+      const time = typeof raw.time === 'string' ? raw.time.slice(0, 64) : '';
+      const messageId = `x:${createHash('sha256').update(sourceMessageId).digest('hex')}`;
+      const fingerprint = createHash('sha256')
+        .update(JSON.stringify([conversationId, sourceMessageId]), 'utf8')
+        .digest('hex');
+      const existing = db()
+        .prepare(
+          'SELECT 1 AS found FROM messages WHERE chatroom_id = ? AND source_message_id = ?',
+        )
+        .get(conversationId, sourceMessageId) as { found: number } | undefined;
+      upsert.run(
+        conversationId,
+        messageId,
+        sourceMessageId,
+        fingerprint,
+        encryptSensitiveText(sender, `message:sender:${conversationId}:${messageId}`),
+        encryptSensitiveText(content, `message:content:${conversationId}:${messageId}`),
+        time,
+        timestamp,
+        type,
+        dateOfTimestamp(timestamp),
+        Number(Boolean(raw.edited)),
+        Number(Boolean(raw.deleted)),
+        raw.sourceUpdatedAt ?? null,
+      );
+      if (!existing) result.inserted++;
     }
   })(messages);
 
@@ -238,6 +329,13 @@ function normalizeMessage(message: WxMessage): WxMessage | null {
 
 function normalizeLocalId(value: number | undefined): number | null {
   return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : null;
+}
+
+function dateOfTimestamp(timestamp: number): string {
+  const date = new Date(timestamp * 1000);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate(),
+  ).padStart(2, '0')}`;
 }
 
 function messageFingerprint(conversationId: string, message: WxMessage): string {

@@ -5,12 +5,15 @@ import type { WxNewMessage, WxSession } from './wx-types';
 
 export type ConversationType = 'group' | 'private';
 export type ConversationFilter = 'all' | ConversationType;
+export type Platform = 'wechat' | 'feishu';
+export type PlatformFilter = 'all' | Platform;
 export type SyncRunStatus = 'running' | 'ok' | 'partial' | 'failed';
 
 const SYNC_LOCK_STALE_MS = 3 * 60 * 1000;
 
 export interface DashboardConversation {
   id: string;
+  platform: Platform;
   name: string;
   chat_type: ConversationType;
   summary: string;
@@ -64,9 +67,9 @@ export function upsertConversations(sessions: WxSession[]) {
   const now = Date.now();
   const statement = db().prepare(`
     INSERT INTO conversations (
-      id, name_cipher, chat_type, summary_cipher, last_sender_cipher,
+      id, platform, source_id, name_cipher, chat_type, summary_cipher, last_sender_cipher,
       last_msg_type, last_time, last_activity, unread, discovered_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, 'wechat', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name_cipher = excluded.name_cipher,
       chat_type = excluded.chat_type,
@@ -86,6 +89,7 @@ export function upsertConversations(sessions: WxSession[]) {
         session.chat_type === 'group' || session.is_group ? 'group' : 'private';
       statement.run(
         id,
+        id,
         encryptSensitiveText(session.chat || id, `conversation:name:${id}`),
         chatType,
         encryptSensitiveText(session.summary ?? '', `conversation:summary:${id}`),
@@ -102,6 +106,89 @@ export function upsertConversations(sessions: WxSession[]) {
       );
     }
   })(sessions);
+  secureDatabaseFiles();
+}
+
+export interface PlatformConversationInput {
+  sourceId: string;
+  name?: string;
+  chatType: ConversationType;
+  summary?: string;
+  lastSender?: string;
+  lastMessageType?: string;
+  lastTime?: string;
+  lastActivity?: number;
+  unread?: number;
+}
+
+export function upsertPlatformConversations(
+  platform: Platform,
+  rows: PlatformConversationInput[],
+) {
+  const now = Date.now();
+  const existingName = db().prepare(
+    'SELECT name_cipher FROM conversations WHERE id = ?',
+  );
+  const statement = db().prepare(`
+    INSERT INTO conversations (
+      id, platform, source_id, name_cipher, chat_type, summary_cipher,
+      last_sender_cipher, last_msg_type, last_time, last_activity, unread,
+      discovered_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name_cipher = excluded.name_cipher,
+      chat_type = excluded.chat_type,
+      summary_cipher = CASE
+        WHEN excluded.summary_cipher = '' THEN conversations.summary_cipher
+        ELSE excluded.summary_cipher
+      END,
+      last_sender_cipher = CASE
+        WHEN excluded.last_sender_cipher = '' THEN conversations.last_sender_cipher
+        ELSE excluded.last_sender_cipher
+      END,
+      last_msg_type = CASE
+        WHEN excluded.last_msg_type = '' THEN conversations.last_msg_type
+        ELSE excluded.last_msg_type
+      END,
+      last_time = CASE
+        WHEN excluded.last_time = '' THEN conversations.last_time
+        ELSE excluded.last_time
+      END,
+      last_activity = MAX(conversations.last_activity, excluded.last_activity),
+      unread = excluded.unread,
+      updated_at = excluded.updated_at
+  `);
+  db().transaction((items: PlatformConversationInput[]) => {
+    for (const row of items) {
+      const sourceId = row.sourceId.trim().slice(0, 512);
+      if (!sourceId) continue;
+      const id = platform === 'wechat' ? sourceId : `${platform}:${sourceId}`;
+      const prior = existingName.get(id) as { name_cipher: string } | undefined;
+      const name = row.name?.trim();
+      const nameCipher = name
+        ? encryptSensitiveText(name, `conversation:name:${id}`)
+        : (prior?.name_cipher ??
+          encryptSensitiveText(
+            platform === 'feishu' ? '飞书会话' : sourceId,
+            `conversation:name:${id}`,
+          ));
+      statement.run(
+        id,
+        platform,
+        sourceId,
+        nameCipher,
+        row.chatType,
+        encryptSensitiveText(row.summary ?? '', `conversation:summary:${id}`),
+        encryptSensitiveText(row.lastSender ?? '', `conversation:last-sender:${id}`),
+        row.lastMessageType ?? '',
+        row.lastTime ?? '',
+        row.lastActivity ?? 0,
+        row.unread ?? 0,
+        now,
+        now,
+      );
+    }
+  })(rows);
   secureDatabaseFiles();
 }
 
@@ -280,7 +367,8 @@ export function pendingBackfillConversations(since: number, limit: number) {
               s.backfill_since
        FROM conversations c
        LEFT JOIN sync_state s ON s.chatroom_id = c.id
-       WHERE c.last_activity >= @since
+       WHERE c.platform = 'wechat'
+         AND c.last_activity >= @since
          AND COALESCE(s.status, '') != 'unsupported'
          AND (
            s.coverage_since IS NULL OR s.coverage_since > @since OR
@@ -307,7 +395,8 @@ export function conversationsMissingCoverage(since: number, limit: number) {
       `SELECT c.id, c.chat_type, c.last_activity
        FROM conversations c
        LEFT JOIN sync_state s ON s.chatroom_id = c.id
-       WHERE c.last_activity >= @since
+       WHERE c.platform = 'wechat'
+         AND c.last_activity >= @since
          AND COALESCE(s.status, '') != 'unsupported'
          AND (s.coverage_since IS NULL OR s.coverage_since > @since OR s.truncated = 1)
        ORDER BY
@@ -328,7 +417,8 @@ export function conversationsNeedingReconcile(limit: number, recentFloor: number
       `SELECT c.id, c.last_activity, COALESCE(s.last_message_timestamp, 0) AS local_timestamp
        FROM conversations c
        LEFT JOIN sync_state s ON s.chatroom_id = c.id
-       WHERE COALESCE(s.status, '') != 'unsupported'
+       WHERE c.platform = 'wechat'
+         AND COALESCE(s.status, '') != 'unsupported'
          AND c.last_activity > COALESCE(s.last_message_timestamp, 0)
          AND (
            COALESCE(s.last_message_timestamp, 0) > 0 OR
@@ -349,24 +439,29 @@ export function conversationsNeedingReconcile(limit: number, recentFloor: number
 export function conversationLookup(conversationId: string): {
   name: string | null;
   chatType: ConversationType;
+  platform: Platform;
 } | null {
   const row = db()
-    .prepare('SELECT name_cipher, chat_type FROM conversations WHERE id = ?')
+    .prepare('SELECT name_cipher, chat_type, platform FROM conversations WHERE id = ?')
     .get(conversationId) as
-    | { name_cipher: string; chat_type: ConversationType }
+    | { name_cipher: string; chat_type: ConversationType; platform: Platform }
     | undefined;
   if (!row) return null;
   try {
     return {
       name: decryptSensitiveText(row.name_cipher, `conversation:name:${conversationId}`),
       chatType: row.chat_type,
+      platform: row.platform,
     };
   } catch {
-    return { name: null, chatType: row.chat_type };
+    return { name: null, chatType: row.chat_type, platform: row.platform };
   }
 }
 
-export function coverageSnapshot(now = new Date()): CoverageSnapshot {
+export function coverageSnapshot(
+  now = new Date(),
+  platform: PlatformFilter = 'all',
+): CoverageSnapshot {
   const nowSeconds = Math.floor(now.getTime() / 1000);
   const recentSince = nowSeconds - 2 * 60 * 60;
   const today = new Date(now);
@@ -374,12 +469,16 @@ export function coverageSnapshot(now = new Date()): CoverageSnapshot {
   const todaySince = Math.floor(today.getTime() / 1000);
 
   const metadata = db()
-    .prepare('SELECT COUNT(*) AS total, MAX(updated_at) AS updated_at FROM conversations')
-    .get() as { total: number; updated_at: number | null };
+    .prepare(
+      `SELECT COUNT(*) AS total, MAX(updated_at) AS updated_at
+       FROM conversations
+       WHERE (@platform = 'all' OR platform = @platform)`,
+    )
+    .get({ platform }) as { total: number; updated_at: number | null };
   return {
     metadata,
-    recent: coverageBucket(recentSince),
-    today: coverageBucket(todaySince),
+    recent: coverageBucket(recentSince, platform),
+    today: coverageBucket(todaySince, platform),
     history: { status: 'not_started' },
   };
 }
@@ -388,10 +487,9 @@ export function dashboardSnapshot(
   since: string,
   until: string,
   filter: ConversationFilter,
+  platform: PlatformFilter = 'all',
 ) {
-  const filterSql = filter === 'all' ? '' : 'WHERE c.chat_type = @filter';
-  const params = { since, until, filter };
-  const totalsParams = filter === 'all' ? {} : { filter };
+  const params = { since, until, filter, platform };
 
   const totals = db()
     .prepare(
@@ -400,9 +498,10 @@ export function dashboardSnapshot(
          SUM(CASE WHEN c.chat_type = 'group' THEN 1 ELSE 0 END) AS total_groups,
          SUM(CASE WHEN c.chat_type = 'private' THEN 1 ELSE 0 END) AS total_private
        FROM conversations c
-       ${filterSql}`,
+       WHERE (@platform = 'all' OR c.platform = @platform)
+         AND (@filter = 'all' OR c.chat_type = @filter)`,
     )
-    .get(totalsParams) as {
+    .get(params) as {
     total_conversations: number;
     total_groups: number | null;
     total_private: number | null;
@@ -418,6 +517,7 @@ export function dashboardSnapshot(
        FROM messages m
        JOIN conversations c ON c.id = m.chatroom_id
        WHERE m.date >= @since AND m.date <= @until
+         AND (@platform = 'all' OR c.platform = @platform)
          AND (@filter = 'all' OR c.chat_type = @filter)`,
     )
     .get(params) as {
@@ -436,6 +536,7 @@ export function dashboardSnapshot(
        FROM messages m
        JOIN conversations c ON c.id = m.chatroom_id
        WHERE m.date >= @since AND m.date <= @until
+         AND (@platform = 'all' OR c.platform = @platform)
          AND (@filter = 'all' OR c.chat_type = @filter)
        GROUP BY m.date
        ORDER BY m.date ASC`,
@@ -451,7 +552,7 @@ export function dashboardSnapshot(
   const encrypted = db()
     .prepare(
       `SELECT
-         c.id, c.name_cipher, c.chat_type, c.summary_cipher,
+         c.id, c.platform, c.name_cipher, c.chat_type, c.summary_cipher,
          c.last_sender_cipher, c.last_time, c.last_activity, c.unread,
          COUNT(m.message_id) AS message_count
        FROM conversations c
@@ -459,7 +560,8 @@ export function dashboardSnapshot(
          ON m.chatroom_id = c.id
         AND m.date >= @since
         AND m.date <= @until
-       WHERE (@filter = 'all' OR c.chat_type = @filter)
+       WHERE (@platform = 'all' OR c.platform = @platform)
+         AND (@filter = 'all' OR c.chat_type = @filter)
        GROUP BY c.id
        ORDER BY
          CASE WHEN c.chat_type = 'group' THEN 0 ELSE 1 END,
@@ -469,6 +571,7 @@ export function dashboardSnapshot(
     )
     .all(params) as Array<{
     id: string;
+    platform: Platform;
     name_cipher: string;
     chat_type: ConversationType;
     summary_cipher: string;
@@ -481,6 +584,7 @@ export function dashboardSnapshot(
 
   const conversations: DashboardConversation[] = encrypted.map((row) => ({
     id: row.id,
+    platform: row.platform,
     name: decryptOrPlaceholder(row.name_cipher, `conversation:name:${row.id}`),
     chat_type: row.chat_type,
     summary: decryptOrPlaceholder(row.summary_cipher, `conversation:summary:${row.id}`),
@@ -509,7 +613,7 @@ export function dashboardSnapshot(
   };
 }
 
-function coverageBucket(since: number) {
+function coverageBucket(since: number, platform: PlatformFilter) {
   const row = db()
     .prepare(
       `SELECT
@@ -519,9 +623,10 @@ function coverageBucket(since: number) {
          SUM(CASE WHEN s.status = 'unsupported' THEN 1 ELSE 0 END) AS unsupported
        FROM conversations c
        LEFT JOIN sync_state s ON s.chatroom_id = c.id
-       WHERE c.last_activity >= @since`,
+       WHERE c.last_activity >= @since
+         AND (@platform = 'all' OR c.platform = @platform)`,
     )
-    .get({ since }) as {
+    .get({ since, platform }) as {
     total: number | null;
     complete: number | null;
     truncated: number | null;

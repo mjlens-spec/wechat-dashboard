@@ -1,0 +1,42 @@
+# 移交清单
+
+## 版本
+
+- 产品：微信飞书消息分析 Dashboard
+- Release：v{{VERSION}}
+- Git 提交：`{{COMMIT}}`
+- 目标系统：macOS
+- 前端与本地服务：Next.js 16.2.6、React 19.2.4、TypeScript
+- 数据库：SQLite / better-sqlite3 12.x
+- 微信读取器：`@jackwener/wx-cli` 0.3.0
+- 飞书读取器：官方 `@larksuite/cli` 1.0.84 或更高版本，user 身份
+- 包管理器：pnpm 11.16.0，依赖版本由 `pnpm-lock.yaml` 固定
+
+## 已包含
+
+- Dashboard 全部受版本控制的源码和双端页面；
+- 微信、飞书群聊和私信的只读同步；
+- 30 分钟页面增量刷新与按需会话租约；
+- 双端逐会话汇总、重点关注提示和潜在商机；
+- Terra High 强制契约、evidence 归属验证和加密导入；
+- `skills/wechat-dashboard` Codex / Claude Code Skill；
+- 安装、权限、读取器、安全、打包与验证脚本；
+- README、移交、隐私、安全和协作文档。
+
+## 主动排除
+
+- `.git/`、`node_modules/`、`.next/`、构建缓存；
+- `.env`、本地数据库、WAL / SHM、备份和日志；
+- 个人项目 Handoff、机器调查记录和真实截图；
+- `~/.wechat-dashboard/` 与 `~/.wx-cli/` 的全部内容；
+- 飞书 OAuth 令牌、微信密钥、联系人、群名、私信名和聊天正文；
+- 临时分析 context / result 文件、UI mockup 原包和历史 ZIP。
+
+## 安全边界
+
+- 本机服务只监听 `127.0.0.1`，写 API 拒绝跨来源请求；
+- 敏感字段使用 AES-256-GCM，主密钥保存在当前用户 macOS Keychain；
+- 飞书固定以 user 身份只读调用；bot 不作静默回退；
+- 私信分析需要对应平台显式授权；
+- 不创建常驻服务、系统定时任务或后台 AI 调度；
+- 包内 `SHA256SUMS.txt` 和 ZIP 外部 `.sha256` 文件可验证交付完整性。

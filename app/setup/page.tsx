@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Clock3, Database, ShieldCheck, Wrench } from 'lucide-react';
+import { CheckCircle2, Clock3, Database, MessageSquareText, ShieldCheck, Wrench } from 'lucide-react';
 
 type SetupStatus = {
   ok: boolean;
@@ -13,6 +13,9 @@ type SetupStatus = {
     defaultSyncDays: number;
     autoSyncMinutes: number;
     myNicknames: string[];
+    feishuEnabled: boolean;
+    analyzeWeChatPrivate: boolean;
+    analyzeFeishuPrivate: boolean;
   };
   checks: {
     wxInstalled: boolean;
@@ -21,6 +24,17 @@ type SetupStatus = {
     wxDaemonPid: number | null;
     readerCachePrivate: boolean;
     activeAccountDirectory: string | null;
+    feishu: {
+      installed: boolean;
+      ready: boolean;
+      identity: 'user' | 'unknown';
+      tokenStatus: string;
+      expiresAt: string | null;
+      refreshExpiresAt: string | null;
+      missingScopes: string[];
+      errorCode: string | null;
+      fullAuthorizationPendingApproval: boolean;
+    };
   };
 };
 
@@ -30,6 +44,9 @@ export default function SetupPage() {
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false);
   const [defaultSyncDays, setDefaultSyncDays] = useState(7);
   const [myNicknames, setMyNicknames] = useState('');
+  const [feishuEnabled, setFeishuEnabled] = useState(true);
+  const [analyzeWeChatPrivate, setAnalyzeWeChatPrivate] = useState(false);
+  const [analyzeFeishuPrivate, setAnalyzeFeishuPrivate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +59,9 @@ export default function SetupPage() {
       setPrivacyConfirmed(data.config.privacyConfirmed);
       setDefaultSyncDays(data.config.defaultSyncDays ?? 7);
       setMyNicknames((data.config.myNicknames ?? []).join('、'));
+      setFeishuEnabled(data.config.feishuEnabled ?? true);
+      setAnalyzeWeChatPrivate(data.config.analyzeWeChatPrivate ?? false);
+      setAnalyzeFeishuPrivate(data.config.analyzeFeishuPrivate ?? false);
     })();
   }, []);
 
@@ -60,6 +80,9 @@ export default function SetupPage() {
           demoMode,
           privacyConfirmed,
           defaultSyncDays,
+          feishuEnabled,
+          analyzeWeChatPrivate,
+          analyzeFeishuPrivate,
         }),
       });
       const data = (await response.json()) as { ok: boolean; error?: string };
@@ -76,10 +99,10 @@ export default function SetupPage() {
     <main className="setup-page">
       <div className="setup-shell">
         <header className="setup-header">
-        <div className="flex items-center gap-2"><span className="brand-mark" /><div className="report-kicker">WeChat Dashboard Setup</div></div>
-        <h1>配置本机微信 Dashboard</h1>
+        <div className="flex items-center gap-2"><span className="brand-mark" /><div className="report-kicker">Dual Chat Dashboard Setup</div></div>
+        <h1>配置微信与飞书会话分析</h1>
         <p>
-          只读取这台 Mac 上的微信群聊与私信，生成本地 SQLite 快照。按需启动且 Chrome 页面打开期间，每 30 分钟自动增量同步一次。
+          微信从这台 Mac 只读同步，飞书通过一次用户认证读取。两端数据均加密保存在本机；页面打开期间每 30 分钟刷新一次。
         </p>
         </header>
 
@@ -123,6 +146,43 @@ export default function SetupPage() {
           </section>
 
           <section className="setup-section">
+            <SectionTitle icon={<MessageSquareText size={15} />} title="飞书认证 · 用户身份" />
+            <CheckRow
+              label="飞书 CLI"
+              ok={status?.checks.feishu.installed ?? false}
+              detail={status?.checks.feishu.installed ? '已安装' : '尚未安装'}
+            />
+            <CheckRow
+              label="消息读取"
+              ok={status?.checks.feishu.ready ?? false}
+              detail={status?.checks.feishu.ready ? '用户授权有效' : '需要重新授权'}
+            />
+            <CheckRow
+              label="核心权限"
+              ok={(status?.checks.feishu.missingScopes.length ?? 1) === 0}
+              detail={
+                (status?.checks.feishu.missingScopes.length ?? 1) === 0
+                  ? '群聊与私信读取已具备'
+                  : `缺少 ${status?.checks.feishu.missingScopes.length ?? 0} 项`
+              }
+            />
+            <div className="setup-ledger mt-3">
+              <div><span>当前身份</span><span>{status?.checks.feishu.identity === 'user' ? '本人用户' : '未就绪'}</span></div>
+              <div><span>完整业务域</span><span>等待飞书应用审核</span></div>
+              <div><span>本轮消息分析</span><span>不受审核状态影响</span></div>
+            </div>
+            <label className="mt-4 flex items-start gap-2 text-[14px]">
+              <input
+                className="mt-1"
+                type="checkbox"
+                checked={feishuEnabled}
+                onChange={(event) => setFeishuEnabled(event.target.checked)}
+              />
+              <span>启用飞书群聊与私信同步</span>
+            </label>
+          </section>
+
+          <section className="setup-section">
             <SectionTitle icon={<Clock3 size={15} />} title="同步范围" />
             <p className="mt-3 text-[13px] leading-relaxed text-[var(--text-3)]">
               首次只导入会话元数据，再读取最近 2 小时的少量活跃会话；当天消息按批次继续补齐。之后页面打开时每 30 分钟只读取新增消息，每小时做一次时间戳对账。
@@ -132,6 +192,36 @@ export default function SetupPage() {
               <div><span>今日</span><span>每批最多 20 个会话</span></div>
               <div><span>7 / 30 天</span><span>后续手动补齐</span></div>
             </div>
+          </section>
+
+          <section className="setup-section">
+            <SectionTitle icon={<ShieldCheck size={15} />} title="语义分析范围" />
+            <div className="setup-ledger mt-3">
+              <div><span>分析模型</span><span>Terra High</span></div>
+              <div><span>群聊</span><span>微信 + 飞书</span></div>
+              <div><span>更新频率</span><span>30 分钟</span></div>
+            </div>
+            <label className="mt-4 flex items-start gap-2 text-[14px]">
+              <input
+                className="mt-1"
+                type="checkbox"
+                checked={analyzeWeChatPrivate}
+                onChange={(event) => setAnalyzeWeChatPrivate(event.target.checked)}
+              />
+              <span>允许当前 Skill 分析微信私信</span>
+            </label>
+            <label className="mt-3 flex items-start gap-2 text-[14px]">
+              <input
+                className="mt-1"
+                type="checkbox"
+                checked={analyzeFeishuPrivate}
+                onChange={(event) => setAnalyzeFeishuPrivate(event.target.checked)}
+              />
+              <span>允许当前 Skill 分析飞书私信</span>
+            </label>
+            <p className="mt-3 text-[12px] leading-relaxed text-[var(--text-3)]">
+              私信只在你明确开启后进入当前 Codex 任务的受限上下文；Dashboard 本身不调用外部模型。
+            </p>
           </section>
 
           <section className="setup-section">
@@ -194,7 +284,7 @@ export default function SetupPage() {
                 onChange={(event) => setPrivacyConfirmed(event.target.checked)}
               />
               <span>
-                我理解 Dashboard 会把群聊与私信加密存入本机 SQLite，主密钥保存在 macOS Keychain；数据不会由本项目上传。
+                我理解 Dashboard 会把微信与飞书的群聊、私信加密存入本机 SQLite，主密钥保存在 macOS Keychain；数据不会由 Dashboard 服务上传。
               </span>
             </label>
             <div className="privacy-ledger">

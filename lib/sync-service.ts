@@ -19,6 +19,7 @@ import {
 import { EncryptionKeyUnavailableError } from './crypto-store';
 import { readConfig } from './config';
 import { automaticSyncTiming } from './sync-schedule.mjs';
+import { syncFeishu } from './feishu-sync';
 import {
   bulkInsertMessages,
   getConversationSyncState,
@@ -117,7 +118,9 @@ export function startViewerScheduledSync(now = Date.now()) {
   }
 
   const mode: SyncMode =
-    coverageSnapshot(new Date(now)).metadata.total === 0 ? 'bootstrap' : 'latest';
+    coverageSnapshot(new Date(now), 'wechat').metadata.total === 0
+      ? 'bootstrap'
+      : 'latest';
   const run = startSync(mode);
   return {
     status: run.started ? ('started' as const) : ('running' as const),
@@ -159,18 +162,51 @@ async function performSync(runId: number, mode: SyncMode) {
       throw new SyncConfigurationError();
     }
 
-    assertPinnedWeChatAccount();
-    const deadline = Date.now() + RUN_TIME_BUDGET_MS;
-    if (mode === 'bootstrap') {
-      await bootstrap(runId, progress, deadline);
-    } else {
-      await incremental(runId, progress, deadline);
+    let wechatError: string | null = null;
+    let feishuError: string | null = null;
+
+    try {
+      assertPinnedWeChatAccount();
+      const deadline = Date.now() + RUN_TIME_BUDGET_MS;
+      if (mode === 'bootstrap') {
+        await bootstrap(runId, progress, deadline);
+      } else {
+        await incremental(runId, progress, deadline);
+      }
+    } catch (error) {
+      wechatError = syncErrorCode(error);
     }
 
-    const status = progress.failedConversations > 0 ? 'partial' : 'ok';
+    if (config.feishuEnabled) {
+      updateSyncRun(runId, { ...progress, phase: 'feishu' });
+      const feishu = await syncFeishu();
+      progress.conversationsSeen += feishu.conversationsSeen;
+      progress.conversationsTotal += feishu.conversationsSeen;
+      progress.conversationsSynced += feishu.conversationsSynced;
+      progress.messagesSeen += feishu.messagesSeen;
+      progress.messagesInserted += feishu.messagesInserted;
+      progress.truncated ||= feishu.truncated;
+      feishuError = feishu.errorCode;
+    }
+
+    const sourceErrors = [wechatError, feishuError].filter(Boolean);
+    if (wechatError) progress.failedConversations++;
+    if (feishuError) progress.failedConversations++;
+    const allSourcesFailed = Boolean(
+      wechatError && (!config.feishuEnabled || feishuError),
+    );
+    const status = allSourcesFailed
+      ? 'failed'
+      : sourceErrors.length > 0 || progress.failedConversations > 0
+        ? 'partial'
+        : 'ok';
     finishSyncRun(runId, status, {
       ...progress,
-      errorCode: status === 'partial' ? 'WX_HISTORY_PARTIAL' : null,
+      errorCode:
+        sourceErrors.length > 1
+          ? 'DUAL_SYNC_FAILED'
+          : (sourceErrors[0] ??
+            (status === 'partial' ? 'CONVERSATION_SYNC_PARTIAL' : null)),
     });
   } catch (error) {
     finishSyncRun(runId, 'failed', {

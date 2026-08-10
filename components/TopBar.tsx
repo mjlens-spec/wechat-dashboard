@@ -36,7 +36,7 @@ export default function TopBar({
   return (
     <header className="app-topbar">
       <div className="topbar-heading">
-        <h1>微信群聊监控</h1>
+        <h1>微信 × 飞书会话分析</h1>
         <div className="topbar-status">
             <Clock3 size={12} />
             <span className="truncate">{statusText}</span>
@@ -72,7 +72,7 @@ export default function TopBar({
             className="btn"
             onClick={onInitialSync}
             disabled={syncing}
-            title="重新检查会话目录，并继续补齐最近 2 小时与今日消息"
+            title="重新检查双端会话目录，并继续补齐今日消息"
           >
             <Database size={13} />
             继续补齐今天

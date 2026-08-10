@@ -22,13 +22,14 @@ type DashboardResponse = {
   error?: string;
   range: RangeKey;
   filter: ConversationFilter;
+  platform: 'wechat' | 'feishu';
   window: { since: string; until: string; days: number };
   cards: CardsData;
   trend: TrendPoint[];
   priority_workspace: PriorityWorkspaceData;
   coverage: CoverageData;
   source: {
-    kind: 'demo' | 'local_wechat';
+    kind: 'demo' | 'local_dual';
     auto_sync_interval_ms: number;
     syncing: boolean;
     last_success_at: number | null;
@@ -55,11 +56,12 @@ type SyncRun = {
 
 export default function Page() {
   const [range, setRange] = useState<RangeKey>('week');
-  const filter: ConversationFilter = 'group';
+  const filter: ConversationFilter = 'all';
   const [date, setDate] = useState(localToday);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [feishuDashboard, setFeishuDashboard] = useState<DashboardResponse | null>(null);
   const [attention, setAttention] = useState<OverviewAttentionData | null>(null);
   const [setupChecked, setSetupChecked] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -91,19 +93,26 @@ export default function Page() {
   }, []);
 
   const reload = useCallback(async () => {
-    const [response, attentionResponse] = await Promise.all([
+    const [response, feishuResponse, attentionResponse] = await Promise.all([
       fetch(
-        `/api/dashboard?range=${range}&date=${date}&type=${filter}&q=${encodeURIComponent(activeQuery)}`,
+        `/api/dashboard?range=${range}&date=${date}&type=${filter}&platform=wechat&q=${encodeURIComponent(activeQuery)}`,
+        { cache: 'no-store' },
+      ),
+      fetch(
+        `/api/dashboard?range=${range}&date=${date}&type=${filter}&platform=feishu&q=${encodeURIComponent(activeQuery)}`,
         { cache: 'no-store' },
       ),
       fetch(`/api/attention?date=${date}`, { cache: 'no-store' }),
     ]);
-    const [data, attentionData] = await Promise.all([
+    const [data, feishuData, attentionData] = await Promise.all([
       response.json() as Promise<DashboardResponse>,
+      feishuResponse.json() as Promise<DashboardResponse>,
       attentionResponse.json() as Promise<OverviewAttentionData & { ok?: boolean }>,
     ]);
     if (!response.ok || !data.ok) throw new Error(data.error || 'Dashboard load failed');
+    if (!feishuResponse.ok || !feishuData.ok) throw new Error(feishuData.error || 'Feishu dashboard load failed');
     setDashboard(data);
+    setFeishuDashboard(feishuData);
     if (attentionResponse.ok && attentionData.ok !== false) setAttention(attentionData);
     setNextSyncAt(
       data.source.last_success_at
@@ -152,7 +161,7 @@ export default function Page() {
       if (syncLock.current) return;
       syncLock.current = true;
       setSyncing(true);
-      setStatusText(mode === 'bootstrap' ? '正在建立安全本地快照…' : '正在读取新增微信消息…');
+      setStatusText(mode === 'bootstrap' ? '正在建立双端安全快照…' : '正在读取微信与飞书新增消息…');
       try {
         const response = await fetch('/api/sync', {
           method: 'POST',
@@ -249,16 +258,40 @@ export default function Page() {
               onSync={() => void syncNow('latest')}
               onBootstrap={() => void syncNow('bootstrap')}
             />
-            <OverviewCockpit
-              cards={dashboard?.cards}
-              days={dashboard?.window.days ?? 7}
-              coverage={dashboard?.coverage}
-              priorities={dashboard?.priority_workspace}
-              attention={attention}
-              lastSuccessAt={dashboard?.source.last_success_at ?? null}
-              stale={dashboard?.source.stale ?? true}
-            />
+            <section className="platform-dashboard-section">
+              <header className="platform-dashboard-header">
+                <span className="platform-chip platform-chip-wechat">微信</span>
+                <div><h2>微信群聊和私信分析</h2><p>本机只读同步 · 微信优先展示</p></div>
+              </header>
+              <OverviewCockpit
+                platform="wechat"
+                cards={dashboard?.cards}
+                days={dashboard?.window.days ?? 7}
+                coverage={dashboard?.coverage}
+                priorities={dashboard?.priority_workspace}
+                attention={attention}
+                lastSuccessAt={dashboard?.source.last_success_at ?? null}
+                stale={dashboard?.source.stale ?? true}
+              />
+            </section>
+            <section className="platform-dashboard-section">
+              <header className="platform-dashboard-header">
+                <span className="platform-chip platform-chip-feishu">飞书</span>
+                <div><h2>飞书私信与群聊分析</h2><p>用户身份认证 · 无需本地信息抓取</p></div>
+              </header>
+              <OverviewCockpit
+                platform="feishu"
+                cards={feishuDashboard?.cards}
+                days={feishuDashboard?.window.days ?? 7}
+                coverage={feishuDashboard?.coverage}
+                priorities={feishuDashboard?.priority_workspace}
+                attention={attention}
+                lastSuccessAt={feishuDashboard?.source.last_success_at ?? null}
+                stale={feishuDashboard?.source.stale ?? true}
+              />
+            </section>
             <div id="priority-workspace" className="priority-workspace-wrap">
+              <div className="platform-dashboard-header compact-platform-header"><span className="platform-chip platform-chip-wechat">微信</span><div><h2>微信优先群聊</h2></div></div>
               <PriorityWorkspace
                 data={dashboard?.priority_workspace}
                 days={dashboard?.window.days ?? 7}
@@ -280,6 +313,21 @@ export default function Page() {
                 saving={prioritySaving}
               />
             </div>
+            <div className="priority-workspace-wrap">
+              <div className="platform-dashboard-header compact-platform-header"><span className="platform-chip platform-chip-feishu">飞书</span><div><h2>飞书优先群聊</h2></div></div>
+              <PriorityWorkspace
+                data={feishuDashboard?.priority_workspace}
+                days={feishuDashboard?.window.days ?? 7}
+                searchValue={searchQuery}
+                onSearchChange={setSearchQuery}
+                onToggleStar={(groupId, starred) =>
+                  updatePriority({ action: 'set_starred', chatroom_id: groupId, starred }).then(() => undefined)
+                }
+                onAddKeyword={(keyword) => updatePriority({ action: 'add_keyword', keyword })}
+                onRemoveKeyword={(id) => updatePriority({ action: 'remove_keyword', id }).then(() => undefined)}
+                saving={prioritySaving}
+              />
+            </div>
           </div>
         </div>
       </main>
@@ -296,7 +344,7 @@ function localToday() {
 
 function sourceStatus(data: DashboardResponse) {
   if (data.source.kind === 'demo') return '示例数据 · 不读取真实微信';
-  if (data.source.syncing) return '正在读取最新微信消息…';
+  if (data.source.syncing) return '正在读取微信与飞书最新消息…';
   if (!data.source.last_success_at) return '等待首次真实数据同步';
   if (data.source.latest_run?.status === 'partial') return '最近一次同步部分完成';
   if (data.source.latest_run?.status === 'failed') return '读取器需要处理';

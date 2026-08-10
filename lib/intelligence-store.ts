@@ -12,12 +12,12 @@ import {
 export const SUMMARY_INTERVAL_MS = 30 * 60 * 1000;
 export const ANALYSIS_JOB_TTL_MS = 30 * 60 * 1000;
 
-const MAX_GROUPS = 50;
-const MAX_MESSAGES_PER_GROUP = 180;
+const MAX_GROUPS = 80;
+const MAX_MESSAGES_PER_GROUP = 160;
 const MAX_MESSAGES_TOTAL = 800;
 const MAX_MESSAGE_CONTENT = 1_200;
 
-export type AnalysisMode = 'scheduled' | 'summaries' | 'alerts';
+export type AnalysisMode = 'scheduled' | 'summaries' | 'alerts' | 'opportunities';
 export type AttentionCategory =
   | 'mention'
   | 'customer_emotion'
@@ -27,6 +27,14 @@ export type AttentionCategory =
   | 'no_solution';
 export type AttentionSeverity = 'critical' | 'high' | 'medium' | 'low';
 export type AttentionStatus = 'open' | 'handled' | 'dismissed';
+export type OpportunityCategory =
+  | 'new_demand'
+  | 'budget_signal'
+  | 'collaboration'
+  | 'upsell'
+  | 'referral'
+  | 'renewal';
+export type OpportunityStatus = 'new' | 'following' | 'converted' | 'dismissed';
 
 const ShortText = z.string().trim().min(1).max(600);
 const SummarySchema = z.object({
@@ -65,10 +73,31 @@ const AlertSchema = z.object({
   suggested_action: z.string().trim().min(1).max(600),
   evidence_ids: z.array(z.string().trim().min(3).max(80)).min(1).max(15),
 });
+const OpportunitySchema = z.object({
+  group_id: z.string().trim().min(1).max(512),
+  category: z.enum([
+    'new_demand',
+    'budget_signal',
+    'collaboration',
+    'upsell',
+    'referral',
+    'renewal',
+  ]),
+  confidence: z.number().min(0).max(1),
+  title: z.string().trim().min(1).max(180),
+  detail: z.string().trim().min(1).max(1_200),
+  business_value: z.string().trim().min(1).max(600),
+  suggested_action: z.string().trim().min(1).max(600),
+  owner: z.string().trim().max(120).nullable().default(null),
+  due: z.string().trim().max(120).nullable().default(null),
+  evidence_ids: z.array(z.string().trim().min(3).max(80)).min(1).max(15),
+});
 const AnalysisPayloadSchema = z.object({
-  model: z.string().trim().min(1).max(120),
+  model: z.literal('gpt-5.6-terra'),
+  reasoning_effort: z.literal('high'),
   summaries: z.array(SummarySchema).max(MAX_GROUPS).default([]),
   alerts: z.array(AlertSchema).max(120).default([]),
+  opportunities: z.array(OpportunitySchema).max(120).default([]),
 });
 const ImportSchema = z.object({
   job_id: z.string().uuid(),
@@ -78,6 +107,8 @@ const ImportSchema = z.object({
 
 interface EncryptedGroupRow {
   id: string;
+  platform: 'wechat' | 'feishu';
+  chat_type: 'group' | 'private';
   name_cipher: string;
   message_count: number;
   last_activity: number;
@@ -106,6 +137,8 @@ interface ContextMessage {
 
 interface ContextGroup {
   id: string;
+  platform: 'wechat' | 'feishu';
+  chat_type: 'group' | 'private';
   name: string;
   total_message_count: number;
   context_message_count: number;
@@ -167,7 +200,7 @@ export function createAnalysisExport(
       .run(
         jobId,
         digest(token),
-        mode,
+        mode === 'opportunities' ? 'scheduled' : mode,
         day,
         JSON.stringify(requestedOutputs),
         inputDigest,
@@ -189,11 +222,11 @@ export function createAnalysisExport(
   const config = readConfig();
   return {
     status: 'ready' as const,
-    summary: `已准备 ${groups.length} 个群、${resolvedEvidence.length} 条消息的受限分析上下文。`,
-    next_actions: ['使用当前 Agent 的首选模型生成结构化结果', '校验证据 ID 后导回 Dashboard'],
+    summary: `已准备 ${groups.length} 个会话、${resolvedEvidence.length} 条消息的受限分析上下文。`,
+    next_actions: ['使用 Terra High 生成结构化结果', '校验证据 ID 后导回 Dashboard'],
     artifacts: [],
     context: {
-      schema_version: 1,
+      schema_version: 2,
       job: {
         id: jobId,
         token,
@@ -214,7 +247,7 @@ export function createAnalysisExport(
       last_summary_generated_at: lastSummaryAt
         ? new Date(lastSummaryAt).toISOString()
         : null,
-      groups,
+      conversations: groups,
     },
   };
 }
@@ -252,12 +285,16 @@ export function importAnalysisResult(raw: unknown, now = Date.now()) {
   if (!requested.has('alerts') && parsed.analysis.alerts.length > 0) {
     throw new AnalysisImportError('UNREQUESTED_OUTPUT', '本任务没有请求重点关注提示。');
   }
+  if (!requested.has('opportunities') && parsed.analysis.opportunities.length > 0) {
+    throw new AnalysisImportError('UNREQUESTED_OUTPUT', '本任务没有请求潜在商机提示。');
+  }
 
   const evidence = evidenceForJob(job.id);
   validateAnalysisEvidence(parsed.analysis, evidence);
 
   let summaryCount = 0;
   let alertCount = 0;
+  let opportunityCount = 0;
   db().transaction(() => {
     for (const summary of parsed.analysis.summaries) {
       const messageCount = summary.evidence_ids.length;
@@ -265,6 +302,7 @@ export function importAnalysisResult(raw: unknown, now = Date.now()) {
         job.day,
         job.id,
         parsed.analysis.model,
+        parsed.analysis.reasoning_effort,
         summary,
         messageCount,
         now,
@@ -272,31 +310,49 @@ export function importAnalysisResult(raw: unknown, now = Date.now()) {
       summaryCount++;
     }
     for (const alert of parsed.analysis.alerts) {
-      upsertAttentionAlert(job.day, job.id, parsed.analysis.model, alert, now);
+      upsertAttentionAlert(
+        job.day,
+        job.id,
+        parsed.analysis.model,
+        parsed.analysis.reasoning_effort,
+        alert,
+        now,
+      );
       alertCount++;
+    }
+    for (const opportunity of parsed.analysis.opportunities) {
+      upsertBusinessOpportunity(
+        job.day,
+        job.id,
+        parsed.analysis.model,
+        parsed.analysis.reasoning_effort,
+        opportunity,
+        now,
+      );
+      opportunityCount++;
     }
     db()
       .prepare(
         `UPDATE analysis_jobs
-         SET status = 'imported', imported_at = ?, analysis_model = ?
+         SET status = 'imported', imported_at = ?, analysis_model = ?, reasoning_effort = ?
          WHERE id = ?`,
       )
-      .run(now, parsed.analysis.model, job.id);
+      .run(now, parsed.analysis.model, parsed.analysis.reasoning_effort, job.id);
   })();
   secureDatabaseFiles();
   return {
     status: 'imported' as const,
-    summary: `已写入 ${summaryCount} 个群聊汇总和 ${alertCount} 条重点关注提示。`,
-    next_actions: ['在 Dashboard 中查看群聊汇总与重点关注提示'],
+    summary: `已写入 ${summaryCount} 个会话汇总、${alertCount} 条重点关注提示和 ${opportunityCount} 条潜在商机。`,
+    next_actions: ['在 Dashboard 中查看会话汇总、重点关注提示与潜在商机'],
     artifacts: [],
-    imported: { summaries: summaryCount, alerts: alertCount },
+    imported: { summaries: summaryCount, alerts: alertCount, opportunities: opportunityCount },
   };
 }
 
 export function summaryDashboard(day = localDay(new Date())) {
   const rows = db()
     .prepare(
-      `SELECT s.*, c.name_cipher
+      `SELECT s.*, c.name_cipher, c.platform, c.chat_type
        FROM group_summaries s
        JOIN conversations c ON c.id = s.chatroom_id
        WHERE s.day = ?
@@ -306,6 +362,8 @@ export function summaryDashboard(day = localDay(new Date())) {
     day: string;
     chatroom_id: string;
     name_cipher: string;
+    platform: 'wechat' | 'feishu';
+    chat_type: 'group' | 'private';
     overview_cipher: string;
     highlights_cipher: string;
     decisions_cipher: string;
@@ -314,6 +372,7 @@ export function summaryDashboard(day = localDay(new Date())) {
     evidence_ids: string;
     message_count: number;
     analysis_model: string;
+    reasoning_effort: string;
     generated_at: number;
   }>;
   const summaries = rows.map((row) => ({
@@ -323,6 +382,8 @@ export function summaryDashboard(day = localDay(new Date())) {
       row.name_cipher,
       `conversation:name:${row.chatroom_id}`,
     ),
+    platform: row.platform,
+    chat_type: row.chat_type,
     overview: decryptOrPlaceholder(
       row.overview_cipher,
       summaryContext(row.day, row.chatroom_id, 'overview'),
@@ -350,6 +411,7 @@ export function summaryDashboard(day = localDay(new Date())) {
     evidence_count: safeJsonArray(row.evidence_ids).length,
     message_count: row.message_count,
     analysis_model: row.analysis_model,
+    reasoning_effort: row.reasoning_effort,
     generated_at: row.generated_at,
   }));
   const lastGeneratedAt = rows.reduce(
@@ -369,7 +431,7 @@ export function summaryDashboard(day = localDay(new Date())) {
 export function attentionDashboard(day = localDay(new Date())) {
   const rows = db()
     .prepare(
-      `SELECT a.*, c.name_cipher
+      `SELECT a.*, c.name_cipher, c.platform, c.chat_type
        FROM attention_alerts a
        JOIN conversations c ON c.id = a.chatroom_id
        WHERE a.day = ?
@@ -383,6 +445,8 @@ export function attentionDashboard(day = localDay(new Date())) {
     day: string;
     chatroom_id: string;
     name_cipher: string;
+    platform: 'wechat' | 'feishu';
+    chat_type: 'group' | 'private';
     category: AttentionCategory;
     severity: AttentionSeverity;
     confidence: number;
@@ -392,6 +456,7 @@ export function attentionDashboard(day = localDay(new Date())) {
     evidence_ids: string;
     status: AttentionStatus;
     analysis_model: string;
+    reasoning_effort: string;
     first_detected_at: number;
     last_detected_at: number;
     handled_at: number | null;
@@ -404,6 +469,8 @@ export function attentionDashboard(day = localDay(new Date())) {
       row.name_cipher,
       `conversation:name:${row.chatroom_id}`,
     ),
+    platform: row.platform,
+    chat_type: row.chat_type,
     category: row.category,
     severity: row.severity,
     confidence: row.confidence,
@@ -416,6 +483,7 @@ export function attentionDashboard(day = localDay(new Date())) {
     evidence_count: safeJsonArray(row.evidence_ids).length,
     status: row.status,
     analysis_model: row.analysis_model,
+    reasoning_effort: row.reasoning_effort,
     first_detected_at: row.first_detected_at,
     last_detected_at: row.last_detected_at,
     handled_at: row.handled_at,
@@ -453,11 +521,103 @@ export function updateAttentionStatus(id: string, status: AttentionStatus) {
   return result.changes > 0;
 }
 
+export function opportunitiesDashboard(day = localDay(new Date())) {
+  const rows = db()
+    .prepare(
+      `SELECT o.*, c.name_cipher, c.platform, c.chat_type
+       FROM business_opportunities o
+       JOIN conversations c ON c.id = o.chatroom_id
+       WHERE o.day = ?
+       ORDER BY
+         CASE o.status WHEN 'new' THEN 0 WHEN 'following' THEN 1 WHEN 'converted' THEN 2 ELSE 3 END,
+         o.confidence DESC, o.last_detected_at DESC`,
+    )
+    .all(day) as Array<{
+    id: string;
+    chatroom_id: string;
+    name_cipher: string;
+    platform: 'wechat' | 'feishu';
+    chat_type: 'group' | 'private';
+    category: OpportunityCategory;
+    confidence: number;
+    title_cipher: string;
+    detail_cipher: string;
+    business_value_cipher: string;
+    suggested_action_cipher: string;
+    owner_cipher: string;
+    due_cipher: string;
+    evidence_ids: string;
+    status: OpportunityStatus;
+    analysis_model: string;
+    reasoning_effort: string;
+    first_detected_at: number;
+    last_detected_at: number;
+    handled_at: number | null;
+  }>;
+  const opportunities = rows.map((row) => ({
+    id: row.id,
+    conversation_id: row.chatroom_id,
+    conversation_name: decryptOrPlaceholder(
+      row.name_cipher,
+      `conversation:name:${row.chatroom_id}`,
+    ),
+    platform: row.platform,
+    chat_type: row.chat_type,
+    category: row.category,
+    confidence: row.confidence,
+    title: decryptOrPlaceholder(row.title_cipher, opportunityContext(row.id, 'title')),
+    detail: decryptOrPlaceholder(row.detail_cipher, opportunityContext(row.id, 'detail')),
+    business_value: decryptOrPlaceholder(
+      row.business_value_cipher,
+      opportunityContext(row.id, 'business-value'),
+    ),
+    suggested_action: decryptOrPlaceholder(
+      row.suggested_action_cipher,
+      opportunityContext(row.id, 'suggested-action'),
+    ),
+    owner: decryptOrPlaceholder(row.owner_cipher, opportunityContext(row.id, 'owner')),
+    due: decryptOrPlaceholder(row.due_cipher, opportunityContext(row.id, 'due')),
+    evidence_count: safeJsonArray(row.evidence_ids).length,
+    status: row.status,
+    analysis_model: row.analysis_model,
+    reasoning_effort: row.reasoning_effort,
+    first_detected_at: row.first_detected_at,
+    last_detected_at: row.last_detected_at,
+    handled_at: row.handled_at,
+  }));
+  return {
+    ok: true,
+    day,
+    opportunities,
+    counts: {
+      new: opportunities.filter((item) => item.status === 'new').length,
+      following: opportunities.filter((item) => item.status === 'following').length,
+      converted: opportunities.filter((item) => item.status === 'converted').length,
+      wechat: opportunities.filter((item) => item.platform === 'wechat').length,
+      feishu: opportunities.filter((item) => item.platform === 'feishu').length,
+    },
+    intelligence: intelligenceStatus(),
+  };
+}
+
+export function updateOpportunityStatus(id: string, status: OpportunityStatus) {
+  const result = db()
+    .prepare(
+      `UPDATE business_opportunities
+       SET status = ?, handled_at = ?
+       WHERE id = ?`,
+    )
+    .run(status, status === 'new' ? null : Date.now(), id);
+  secureDatabaseFiles();
+  return result.changes > 0;
+}
+
 export function intelligenceStatus() {
   const latest = db()
     .prepare(
       `SELECT id, mode, status, requested_outputs, created_at, expires_at,
-              imported_at, analysis_model, group_count, message_count, error_code
+              imported_at, analysis_model, reasoning_effort, group_count,
+              message_count, error_code
        FROM analysis_jobs ORDER BY created_at DESC LIMIT 1`,
     )
     .get() as
@@ -470,6 +630,7 @@ export function intelligenceStatus() {
         expires_at: number;
         imported_at: number | null;
         analysis_model: string | null;
+        reasoning_effort: string | null;
         group_count: number;
         message_count: number;
         error_code: string | null;
@@ -477,19 +638,21 @@ export function intelligenceStatus() {
     | undefined;
   const lastImported = db()
     .prepare(
-      `SELECT analysis_model, imported_at
+      `SELECT analysis_model, reasoning_effort, imported_at
        FROM analysis_jobs
        WHERE status = 'imported' AND analysis_model IS NOT NULL
        ORDER BY imported_at DESC LIMIT 1`,
     )
     .get() as
-    | { analysis_model: string; imported_at: number }
+    | { analysis_model: string; reasoning_effort: string | null; imported_at: number }
     | undefined;
   return latest
     ? {
         ...latest,
         requested_outputs: safeJsonArray(latest.requested_outputs),
         display_model: latest.analysis_model ?? lastImported?.analysis_model ?? null,
+        display_reasoning:
+          latest.reasoning_effort ?? lastImported?.reasoning_effort ?? null,
         last_imported_at: lastImported?.imported_at ?? null,
       }
     : null;
@@ -506,18 +669,31 @@ export class AnalysisImportError extends Error {
 }
 
 function collectContextGroups(day: string): ContextGroup[] {
+  const config = readConfig();
   const groupRows = db()
     .prepare(
-      `SELECT c.id, c.name_cipher, c.last_activity, COUNT(m.message_id) AS message_count
+      `SELECT c.id, c.platform, c.chat_type, c.name_cipher, c.last_activity,
+              COUNT(m.message_id) AS message_count
        FROM conversations c
        JOIN messages m ON m.chatroom_id = c.id AND m.date = ?
-       WHERE c.chat_type = 'group'
+       WHERE m.deleted = 0
+         AND (
+           c.chat_type = 'group' OR
+           (c.platform = 'wechat' AND c.chat_type = 'private' AND ? = 1) OR
+           (c.platform = 'feishu' AND c.chat_type = 'private' AND ? = 1)
+         )
        GROUP BY c.id
-       ORDER BY c.last_activity DESC
+       ORDER BY c.platform, CASE WHEN c.chat_type = 'group' THEN 0 ELSE 1 END,
+                c.last_activity DESC
        LIMIT ?`,
     )
-    .all(day, MAX_GROUPS) as EncryptedGroupRow[];
-  const myNames = readConfig().myNicknames;
+    .all(
+      day,
+      Number(config.analyzeWeChatPrivate),
+      Number(config.analyzeFeishuPrivate),
+      MAX_GROUPS,
+    ) as EncryptedGroupRow[];
+  const myNames = config.myNicknames;
   let remaining = MAX_MESSAGES_TOTAL;
   const groups: ContextGroup[] = [];
   for (const groupRow of groupRows) {
@@ -528,7 +704,7 @@ function collectContextGroups(day: string): ContextGroup[] {
         `SELECT chatroom_id, message_id, sender_cipher, content_cipher,
                 time, timestamp, type
          FROM messages
-         WHERE chatroom_id = ? AND date = ?
+         WHERE chatroom_id = ? AND date = ? AND deleted = 0
          ORDER BY timestamp DESC, message_id DESC
          LIMIT ?`,
       )
@@ -548,6 +724,8 @@ function collectContextGroups(day: string): ContextGroup[] {
     );
     groups.push({
       id: groupRow.id,
+      platform: groupRow.platform,
+      chat_type: groupRow.chat_type,
       name,
       total_message_count: groupRow.message_count,
       context_message_count: messages.length,
@@ -610,20 +788,18 @@ function messageIdFromEvidence(_day: string, _groupId: string, evidence: string)
 function requestedOutputsFor(mode: AnalysisMode, summaryDue: boolean) {
   if (mode === 'summaries') return ['summaries'] as const;
   if (mode === 'alerts') return ['alerts'] as const;
+  if (mode === 'opportunities') return ['opportunities'] as const;
   return summaryDue
-    ? (['summaries', 'alerts'] as const)
-    : (['alerts'] as const);
+    ? (['summaries', 'alerts', 'opportunities'] as const)
+    : (['alerts', 'opportunities'] as const);
 }
 
 function analysisRules() {
   return {
     model_preference: {
-      primary: 'gpt-5.6-luna',
-      primary_reasoning: 'max',
-      fallback: 'gpt-5.6-terra',
-      fallback_reasoning: 'max',
-      claude_code:
-        'Claude Code 无法调用 Luna / Terra 时，使用当前 Claude 模型和最高可用推理强度，并记录真实模型。',
+      required_model: 'gpt-5.6-terra',
+      required_reasoning: 'high',
+      policy: '只接受 Terra High 结果；模型或推理强度不一致时拒绝导入。',
     },
     separation:
       '每个群必须独立分析、独立生成一条 summary；禁止把多个群合并成总汇总。',
@@ -636,6 +812,14 @@ function analysisRules() {
       no_response: '一个明确问题或请求在合理时间内仍无人回应；结合消息时间判断。',
       conflict: '群内出现相互指责、对立升级或协作冲突。',
       no_solution: '问题持续被讨论，但没有负责人、行动项或可执行解决方案。',
+    },
+    opportunities: {
+      new_demand: '出现明确的新需求、项目意向或待解决业务问题。',
+      budget_signal: '出现预算、采购、报价、合同或付款意向信号。',
+      collaboration: '出现品牌、渠道、内容、资源或联合项目合作机会。',
+      upsell: '现有合作范围存在可验证的增购、升级或扩展空间。',
+      referral: '出现转介绍、引荐决策人或连接新客户的机会。',
+      renewal: '出现续约、延长合作或复购信号。',
     },
     precision:
       '优先准确，避免把普通抱怨、闲聊、已明确解决的问题升级为重点提示。',
@@ -677,12 +861,16 @@ function validateAnalysisEvidence(
     validate(summary.group_id, summary.evidence_ids);
   }
   for (const alert of analysis.alerts) validate(alert.group_id, alert.evidence_ids);
+  for (const opportunity of analysis.opportunities) {
+    validate(opportunity.group_id, opportunity.evidence_ids);
+  }
 }
 
 function upsertGroupSummary(
   day: string,
   jobId: string,
   model: string,
+  reasoningEffort: string,
   summary: z.infer<typeof SummarySchema>,
   messageCount: number,
   now: number,
@@ -693,8 +881,8 @@ function upsertGroupSummary(
       `INSERT INTO group_summaries (
          day, chatroom_id, overview_cipher, highlights_cipher, decisions_cipher,
          action_items_cipher, risks_cipher, evidence_ids, message_count,
-         analysis_model, generated_at, job_id
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         analysis_model, reasoning_effort, generated_at, job_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(day, chatroom_id) DO UPDATE SET
          overview_cipher = excluded.overview_cipher,
          highlights_cipher = excluded.highlights_cipher,
@@ -704,6 +892,7 @@ function upsertGroupSummary(
          evidence_ids = excluded.evidence_ids,
          message_count = excluded.message_count,
          analysis_model = excluded.analysis_model,
+         reasoning_effort = excluded.reasoning_effort,
          generated_at = excluded.generated_at,
          job_id = excluded.job_id`,
     )
@@ -718,6 +907,7 @@ function upsertGroupSummary(
       JSON.stringify(summary.evidence_ids),
       messageCount,
       model,
+      reasoningEffort,
       now,
       jobId,
     );
@@ -727,6 +917,7 @@ function upsertAttentionAlert(
   day: string,
   jobId: string,
   model: string,
+  reasoningEffort: string,
   alert: z.infer<typeof AlertSchema>,
   now: number,
 ) {
@@ -738,8 +929,9 @@ function upsertAttentionAlert(
       `INSERT INTO attention_alerts (
          id, day, chatroom_id, category, severity, confidence,
          title_cipher, detail_cipher, suggested_action_cipher, evidence_ids,
-         status, analysis_model, first_detected_at, last_detected_at, job_id
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+         status, analysis_model, reasoning_effort, first_detected_at,
+         last_detected_at, job_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          severity = excluded.severity,
          confidence = excluded.confidence,
@@ -748,6 +940,7 @@ function upsertAttentionAlert(
          suggested_action_cipher = excluded.suggested_action_cipher,
          evidence_ids = excluded.evidence_ids,
          analysis_model = excluded.analysis_model,
+         reasoning_effort = excluded.reasoning_effort,
          last_detected_at = excluded.last_detected_at,
          job_id = excluded.job_id`,
     )
@@ -766,6 +959,67 @@ function upsertAttentionAlert(
       ),
       JSON.stringify(alert.evidence_ids),
       model,
+      reasoningEffort,
+      now,
+      now,
+      jobId,
+    );
+}
+
+function upsertBusinessOpportunity(
+  day: string,
+  jobId: string,
+  model: string,
+  reasoningEffort: string,
+  opportunity: z.infer<typeof OpportunitySchema>,
+  now: number,
+) {
+  const opportunityId = `o_${digest(
+    [
+      day,
+      opportunity.group_id,
+      opportunity.category,
+      ...[...opportunity.evidence_ids].sort(),
+    ].join('\u0000'),
+  ).slice(0, 28)}`;
+  const context = (field: string) => opportunityContext(opportunityId, field);
+  db()
+    .prepare(
+      `INSERT INTO business_opportunities (
+         id, day, chatroom_id, category, confidence, title_cipher,
+         detail_cipher, business_value_cipher, suggested_action_cipher,
+         owner_cipher, due_cipher, evidence_ids, status, analysis_model,
+         reasoning_effort, first_detected_at, last_detected_at, job_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         confidence = excluded.confidence,
+         title_cipher = excluded.title_cipher,
+         detail_cipher = excluded.detail_cipher,
+         business_value_cipher = excluded.business_value_cipher,
+         suggested_action_cipher = excluded.suggested_action_cipher,
+         owner_cipher = excluded.owner_cipher,
+         due_cipher = excluded.due_cipher,
+         evidence_ids = excluded.evidence_ids,
+         analysis_model = excluded.analysis_model,
+         reasoning_effort = excluded.reasoning_effort,
+         last_detected_at = excluded.last_detected_at,
+         job_id = excluded.job_id`,
+    )
+    .run(
+      opportunityId,
+      day,
+      opportunity.group_id,
+      opportunity.category,
+      opportunity.confidence,
+      encryptSensitiveText(opportunity.title, context('title')),
+      encryptSensitiveText(opportunity.detail, context('detail')),
+      encryptSensitiveText(opportunity.business_value, context('business-value')),
+      encryptSensitiveText(opportunity.suggested_action, context('suggested-action')),
+      encryptSensitiveText(opportunity.owner ?? '', context('owner')),
+      encryptSensitiveText(opportunity.due ?? '', context('due')),
+      JSON.stringify(opportunity.evidence_ids),
+      model,
+      reasoningEffort,
       now,
       now,
       jobId,
@@ -820,6 +1074,10 @@ function summaryContext(day: string, groupId: string, field: string) {
 
 function alertContext(alertId: string, field: string) {
   return `analysis:alert:${alertId}:${field}`;
+}
+
+function opportunityContext(opportunityId: string, field: string) {
+  return `analysis:opportunity:${opportunityId}:${field}`;
 }
 
 function decryptOrPlaceholder(ciphertext: string, context: string) {

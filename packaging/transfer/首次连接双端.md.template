@@ -1,0 +1,51 @@
+# 首次连接微信与飞书
+
+代码可以完整迁移；两端账号、凭证和数据库必须在当前 Mac 上独立配置。不要复制其他人的 `all_keys.json`、Dashboard 数据库、飞书令牌或 Keychain 主密钥。
+
+## 1. 微信只读接入
+
+1. 保持微信 Mac 版正常登录。
+2. 运行 `安装并启动.command`，再打开 `/setup` 检查 `wx-cli`、读取服务、缓存权限和当前账号。
+3. 已有可用 `~/.wx-cli/all_keys.json` 时不要运行 `wx init`，避免覆盖当前密钥映射。
+4. 不要高频退出、重启、扫码或重新登录微信；不要自动重签微信、启动 Frida 或关闭 SIP。
+5. 读取器尚未就绪时，让 Codex 只做本机匿名检查，并提出一次受控恢复方案。
+
+## 2. 飞书用户授权
+
+移交包安装的是飞书官方 `lark-cli`。首次使用需要当前用户在浏览器完成一次应用配置和 IM 域授权：
+
+```bash
+lark-cli config init --new
+lark-cli auth login --domain im
+lark-cli auth status --json --verify
+```
+
+`--domain im` 会请求完整的飞书消息域权限；Dashboard 实际只调用群聊、私信和消息搜索的读取命令，并在每次调用中强制 `--as user`。如果组织管理员要求审核应用或权限，需要先完成审批，再重新执行登录命令。
+
+Dashboard 核心读取权限包括：
+
+- `im:chat:read`
+- `im:message.group_msg:get_as_user`
+- `im:message.p2p_msg:get_as_user`
+- `im:message:readonly`
+- `search:message`
+
+飞书令牌由 CLI 和 macOS Keychain 管理，不写入项目、Dashboard 数据库或配置文件。
+
+## 3. Dashboard 设置
+
+1. 在 `/setup` 确认两端检查状态。
+2. 勾选本机隐私说明。
+3. 选择是否启用飞书同步。
+4. 群聊始终可进入受限分析；微信私信和飞书私信必须分别明确开启。
+5. 填写本人在工作群中可能出现的昵称，用于识别“@ 我”。
+6. 保存设置后调用 `$wechat-dashboard`。
+
+## 4. 成功标准
+
+- 微信与飞书会话均能以匿名计数完成同步；
+- 总览按微信、飞书分区，重点关注页左微信、右飞书；
+- 群聊汇总显示双端标签；
+- 潜在商机页可读取经 evidence 校验的结果；
+- 语义导入记录 `gpt-5.6-terra` 与 reasoning `high`；
+- 所有页面关闭后，临时本机服务在短租约结束后退出。

@@ -6,6 +6,8 @@ import type { PriorityWorkspaceData } from '@/components/PriorityWorkspace';
 
 export type OverviewAttentionItem = {
   id: string;
+  platform: 'wechat' | 'feishu';
+  chat_type: 'group' | 'private';
   group_name: string;
   category:
     | 'mention'
@@ -25,7 +27,11 @@ export type OverviewAttentionItem = {
 export type OverviewAttentionData = {
   alerts: OverviewAttentionItem[];
   counts: { open: number; critical: number; high: number; mentions: number };
-  intelligence: { display_model: string | null; imported_at: number | null } | null;
+  intelligence: {
+    display_model: string | null;
+    display_reasoning?: string | null;
+    imported_at: number | null;
+  } | null;
 };
 
 const CATEGORY_LABELS: Record<OverviewAttentionItem['category'], string> = {
@@ -45,6 +51,7 @@ export default function OverviewCockpit({
   days,
   lastSuccessAt,
   stale,
+  platform,
 }: {
   cards?: CardsData;
   coverage?: CoverageData;
@@ -53,9 +60,13 @@ export default function OverviewCockpit({
   days: number;
   lastSuccessAt: number | null;
   stale: boolean;
+  platform: 'wechat' | 'feishu';
 }) {
-  const openAlerts = attention?.alerts.filter((alert) => alert.status === 'open').slice(0, 5) ?? [];
-  const highestPriority = (attention?.counts.critical ?? 0) + (attention?.counts.high ?? 0);
+  const platformAlerts = attention?.alerts.filter((alert) => alert.platform === platform) ?? [];
+  const openAlerts = platformAlerts.filter((alert) => alert.status === 'open').slice(0, 5);
+  const highestPriority = platformAlerts.filter(
+    (alert) => alert.status === 'open' && isUrgent(alert.severity),
+  ).length;
 
   return (
     <section className="overview-cockpit">
@@ -65,7 +76,10 @@ export default function OverviewCockpit({
             <div className="report-kicker">Today · Needs you</div>
             <h1>今天要处理什么</h1>
             <p>
-              {modelLabel(attention?.intelligence?.display_model)}
+              {modelLabel(
+                attention?.intelligence?.display_model,
+                attention?.intelligence?.display_reasoning,
+              )}
               {attention?.intelligence?.imported_at
                 ? ` ${formatTime(attention.intelligence.imported_at)} 生成`
                 : ' 等待首次分析'}
@@ -73,7 +87,7 @@ export default function OverviewCockpit({
             </p>
           </div>
           <div className="needs-count">
-            <strong>{attention?.counts.open ?? 0}</strong>
+            <strong>{platformAlerts.filter((alert) => alert.status === 'open').length}</strong>
             <span>项待处理 · {highestPriority} 项最高优先</span>
           </div>
         </header>
@@ -113,8 +127,8 @@ export default function OverviewCockpit({
 
         <footer className="panel-footer">
           <span>
-            {attention && attention.counts.open > openAlerts.length
-              ? `还有 ${attention.counts.open - openAlerts.length} 项提示`
+            {platformAlerts.filter((alert) => alert.status === 'open').length > openAlerts.length
+              ? `还有 ${platformAlerts.filter((alert) => alert.status === 'open').length - openAlerts.length} 项提示`
               : '今天的待关注提示已全部列出'}
           </span>
           <Link href="/attention">查看全部重点关注提示 →</Link>
@@ -144,7 +158,7 @@ export default function OverviewCockpit({
         <PriorityLedger priorities={priorities} />
 
         <footer className="ledger-footer">
-          数据源：本机微信 Mac 客户端 · SQLite 快照只保存在本机
+          数据源：{platform === 'wechat' ? '本机微信 Mac 客户端' : '飞书 CLI 用户认证'} · SQLite 快照只保存在本机
         </footer>
       </aside>
     </section>
@@ -260,9 +274,12 @@ function isUrgent(severity: OverviewAttentionItem['severity']) {
   return severity === 'critical' || severity === 'high';
 }
 
-function modelLabel(model: string | null | undefined) {
-  if (model?.includes('luna')) return 'Luna Max';
-  if (model?.includes('terra')) return 'Terra Max';
+function modelLabel(
+  model: string | null | undefined,
+  reasoning: string | null | undefined,
+) {
+  if (model?.includes('terra') && reasoning === 'high') return 'Terra High';
+  if (model?.includes('terra')) return 'Terra · 历史强度未记录';
   return model || 'Codex';
 }
 

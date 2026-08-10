@@ -1,8 +1,8 @@
-# WeChat Dashboard
+# WeChat × Feishu Dashboard
 
-WeChat Dashboard 是一个面向 Codex、兼容 Claude Code 的 macOS 本机微信群聊看板。它只读已经登录的微信 Mac 客户端数据，在 Chrome 中展示近期动态；Codex 首选 Luna Max、回退 Terra Max，Claude Code 使用当前实际模型，对受限的今日群聊上下文做语义分析，再把逐群汇总和重点关注提示加密写回本机。
+WeChat × Feishu Dashboard 是一个面向 Codex 的 macOS 本机双端会话分析看板。微信从已登录的 Mac 客户端只读同步；飞书完成一次用户认证后，通过 `lark-cli --as user` 读取群聊与私信。Terra High 对受限的今日会话上下文做语义分析，再把逐会话汇总、重点关注提示和潜在商机加密写回本机。
 
-当前版本已经接入真实本地数据。群聊是最高优先级；私信只做尽力读取，持续无法解析时会跳过，不影响群聊刷新。项目不提供发送、回复、撤回、加好友或修改联系人等微信操作。
+当前版本已经接入微信与飞书真实数据。两端群聊保持最高优先级；私信同步与语义分析分别受本机设置控制。项目不提供发送、回复、撤回、加好友或修改联系人等写操作。
 
 ## 运行方式
 
@@ -12,23 +12,24 @@ WeChat Dashboard 是一个面向 Codex、兼容 Claude Code 的 macOS 本机微�
 - 调用 Skill 时启动只监听 `127.0.0.1` 的临时 production 服务。
 - 任意 Dashboard 页面打开时，本机页面心跳会在同步到期后触发新增消息读取；频率约为每 30 分钟一次，每小时做一次时间戳对账。
 - 页面每分钟向本机服务发送一次心跳，但只能续到当前 Skill 租约上限。所有页面关闭后，临时服务约 3 分钟内自动退出；当前 Agent 任务结束时会停止服务或把查看宽限缩短到 10 分钟。
-- 模型语义分析只存在于当前仍在运行的 Codex 或 Claude Code 任务中。任务结束后不会继续后台分析。
+- 模型语义分析只存在于当前仍在运行、且可使用 Terra High 的 Codex 任务中。任务结束后不会继续后台分析。
 - 再次使用时重新调用 Skill；也可以显式运行 `pnpm session:stop`。
 
 这意味着本地页面服务和 AI 分析是两个边界：Chrome 页面负责维持临时本机监听和消息增量刷新；当前 Agent 任务负责语义分析。没有常驻调度器时，任务结束后无法继续每 30 分钟调用模型。
 
 ## 当前能力
 
-- 读取本机会话元数据，区分群聊与私信。
+- 微信读取本机会话元数据；飞书通过用户认证读取会话，统一区分平台、群聊与私信。
 - 首次同步先建立元数据快照，再分批补齐最近 2 小时和当天消息。
 - 页面打开期间每 30 分钟增量同步；提供“立即刷新”和“继续补齐今天”。
 - 展示消息量、活跃群聊、活跃私信、趋势、近期会话和同步覆盖率。
 - 总览提供“优先群聊”工作区：群聊可手动星标置顶；优先关键词命中群名或当前统计区间消息时自动前置；搜索可以同时检索群名和本机已同步的区间消息。
 - 优先级顺序固定为“星标置顶 → 关键词命中数 → 当前区间消息量 → 最近活跃时间”。关键词使用 AES-256-GCM 加密保存，搜索与排序只在本机完成。
-- `/summaries` 为每个群生成一张独立卡片，不跨群合并。
-- `/attention` 展示“重点关注提示”，覆盖重要 @ 我、客户情绪、紧急事项、久未回复、冲突和久无方案六类情况。
-- Luna Max 是主分析模型；无法运行时只回退一次 Terra Max，结果记录真实模型名。
-- 所有结构化结论必须引用同一任务、同一群的 evidence ID，导入时强制校验。
+- `/summaries` 按微信、飞书分区，为每个会话生成独立卡片。
+- `/attention` 左侧微信、右侧飞书，覆盖重要 @ 我、客户情绪、紧急事项、久未回复、冲突和久无方案六类情况。
+- `/opportunities` 展示新需求、预算、合作、增购、转介绍和续约等潜在商机。
+- 语义分析只接受 Terra High（`gpt-5.6-terra` + reasoning `high`）。
+- 所有结构化结论必须引用同一任务、同一会话的 evidence ID，导入时强制校验。
 - 聊天正文、会话名称、摘要、发送者、群聊汇总和提示正文使用 AES-256-GCM 加密；主密钥保存在 macOS Keychain。
 - UI 采用本机 Lens Design 的 Slate & Wine 视觉语言：孔雀蓝、酒红、金色和冷灰纸面，使用克制圆角、细描边与轻量阴影；字体只使用 macOS 系统黑体和通用 sans-serif，不依赖特殊品牌字体。
 
@@ -40,7 +41,7 @@ Dashboard 和 Skill 不会执行以下动作：
 - 修改微信签名；
 - 启动 Frida 或附加微信进程；
 - 退出、重启或重新登录微信；
-- 导出私信给模型；
+- 未经对应平台设置明确开启时导出私信给模型；
 - 上传完整数据库、数据库密钥或账号目录；
 - 安装任何常驻 Dashboard 服务或定时 AI 任务。
 
@@ -50,9 +51,10 @@ Dashboard 和 Skill 不会执行以下动作：
 
 - macOS；当前实测环境为 Apple Silicon 和微信 Mac 版 4.1.11。
 - Node.js 20 或更高版本、pnpm。
+- 飞书官方 `lark-cli` 1.0.84 或更高版本；凭证由 CLI 与 macOS Keychain 管理。
 - 已配置并可读取当前账号的 `wx` 读取器。
 - `wx daemon` 正在运行，且 `~/.wx-cli` 只允许当前用户访问。
-- 本机 Codex 可调用 Luna Max；Terra Max 作为回退。
+- 本机 Codex 可调用 Terra High。
 
 ## 安装
 
@@ -73,7 +75,7 @@ pnpm skill:install
 pnpm skill:check
 ```
 
-安装脚本只创建指向当前仓库 `skills/wechat-dashboard` 的符号链接；如果目标位置已有同名真实目录或指向其他位置的链接，它会拒绝覆盖。Codex 安装位置为 `~/.codex/skills/wechat-dashboard`，调用 `$wechat-dashboard`；Skill 的显示名称为“微信分析启动”，桌面端也可以输入 `/` 后从 Skill 列表选择。Claude Code 安装位置为 `~/.claude/skills/wechat-dashboard`，调用 `/wechat-dashboard`。工程不依赖一个脱离列表选择流程的任意 `/微信分析启动` 文本别名。
+安装脚本只创建指向当前仓库 `skills/wechat-dashboard` 的符号链接；如果目标位置已有同名真实目录或指向其他位置的链接，它会拒绝覆盖。Codex 安装位置为 `~/.codex/skills/wechat-dashboard`，调用 `$wechat-dashboard`；Skill 的显示名称为“微信分析启动”，桌面端也可以输入 `/` 后从 Skill 列表选择。Claude Code 安装位置为 `~/.claude/skills/wechat-dashboard`，可启动本机页面与同步；若宿主无法使用 Terra High，语义结果不会导入。工程不依赖脱离列表选择流程的任意 `/微信分析启动` 文本别名。
 
 每次调用 Skill 时都会先启动临时本机服务，并自动在内置浏览器或 Google Chrome 中打开 Dashboard；明确要求“停止”时例外。单轮分析完成后页面最多保留 10 分钟，关闭页面后临时服务仍会按短租约自动退出。
 
@@ -111,18 +113,19 @@ pnpm session:stop
 默认 `scheduled` 单轮流程：
 
 1. 启动本机临时 Dashboard，自动在内置浏览器或 Google Chrome 中打开页面，并增量同步消息。
-2. 只从当天群聊导出有界上下文：最多 50 个群、每群 180 条、总计 800 条，每条正文最多 1200 字符。
-3. Luna Max 按群独立生成当天汇总，并检查重点关注事项；Luna 无法运行时回退一次 Terra Max。
-4. 每条结论引用匿名 evidence ID；导入时验证 evidence ID 属于同一任务和同一群。
+2. 从当天双端会话导出有界上下文：最多 80 个会话、每会话 160 条、总计 800 条，每条正文最多 1200 字符；私信必须显式开启。
+3. Terra High 按会话独立生成当天汇总、重点关注提示和潜在商机。
+4. 每条结论引用匿名 evidence ID；导入时验证 evidence ID 属于同一任务和同一会话。
 5. 结果继续加密落盘；临时上下文和结果文件在成功导入后删除。
 
-用户明确要求“持续监控”时，Skill 可以让当前 Codex 或 Claude Code 任务保持活动，并使用 35 分钟任务租约覆盖下一次 30 分钟循环。每轮前必须确认临时监听仍可达且 Chrome 页面仍有心跳；页面关闭后停止，不自动重启。这个循环不会跨越当前 Agent 任务，也不会创建定时 Automation。任务结束前必须停止服务，或把仅用于查看的宽限缩短到 10 分钟。
+用户明确要求“持续监控”时，Skill 可以让当前支持 Terra High 的 Codex 任务保持活动，并使用 35 分钟任务租约覆盖下一次 30 分钟循环。每轮前必须确认临时监听仍可达且 Chrome 页面仍有心跳；页面关闭后停止，不自动重启。这个循环不会跨越当前 Agent 任务，也不会创建定时 Automation。任务结束前必须停止服务，或把仅用于查看的宽限缩短到 10 分钟。
 
 手动桥接命令：
 
 ```bash
 node skills/wechat-dashboard/scripts/dashboard-bridge.mjs prepare --mode summaries
 node skills/wechat-dashboard/scripts/dashboard-bridge.mjs prepare --mode alerts
+node skills/wechat-dashboard/scripts/dashboard-bridge.mjs prepare --mode opportunities
 ```
 
 桥接脚本拒绝非 loopback URL。
@@ -150,18 +153,18 @@ Dashboard 数据根目录固定为当前用户的 `~/.wechat-dashboard`，不接
 3. 不复制其他用户的 `all_keys.json`、Keychain 主密钥或 Dashboard 数据库。
 4. 运行 `pnpm privacy:harden`、`pnpm reader:inspect` 和 `pnpm build`。
 5. 运行 `pnpm skill:install`，把同一份 Skill 安全链接到 Codex 和 Claude Code 的用户 Skill 目录。
-6. 在 Codex 调用 `$wechat-dashboard`，或在 Claude Code 调用 `/wechat-dashboard`，再到 `/setup` 验证本机读取器和账号。
+6. 在 Codex 调用 `$wechat-dashboard`，再到 `/setup` 验证本机读取器、飞书用户授权和账号。Claude Code 可以启动本机页面与同步，但无法提供 Terra High 时不执行语义导入。
 7. 先完成安全 bootstrap，再逐批扩展当天覆盖。
 
 不需要安装 LaunchAgent，也不需要创建 Codex Automation。微信升级、重装或切换账号后，可能需要重新做一次低频、受控的本机读取器验证。
 
-为“舒舒”重新生成脱敏迁移包时，先提交当前代码，再运行：
+生成脱敏的完整项目移交包时，先提交当前代码，再运行：
 
 ```bash
-pnpm package:shushu
+pnpm package:transfer
 ```
 
-脚本只打包 Git 已跟踪源码，并自动生成安装说明、检查脚本与 `SHA256SUMS.txt`。输出文件为项目根目录的 `微信监督管理 for 舒舒.zip`；本机数据库、密钥、日志、构建缓存、项目 handoff 和 UI mockup 不会进入包内。
+脚本只接受干净的 Git 工作树，只打包已跟踪源码，并自动生成安装说明、双端接入说明、检查脚本、包内 `SHA256SUMS.txt` 和 ZIP 外部校验文件。输出位于 `.release/`；本机数据库、密钥、日志、构建缓存、项目 Handoff、UI mockup 和历史 ZIP 不会进入包内。完整移交边界见 [TRANSFER.md](TRANSFER.md)。
 
 ## 验证
 
@@ -193,7 +196,7 @@ pnpm reader:inspect
 
 ## 项目协作
 
-接手开发前阅读 [AGENTS.md](AGENTS.md)、[CLAUDE.md](CLAUDE.md) 和 [项目 Context / Handoff](WeChat_Dashboard_Context_Handoff_OC_0809%5BA%5D.md)。真实聊天数据、数据库、Keychain 密钥、`~/.wx-cli`、`.local-debug/`、日志和真实截图不得提交到 Git。未经用户要求，不提交、不推送、不创建 PR。
+接手开发前阅读 [AGENTS.md](AGENTS.md)、[CLAUDE.md](CLAUDE.md) 和 [TRANSFER.md](TRANSFER.md)；本机存在项目 Context / Handoff 时再补充阅读。真实聊天数据、数据库、Keychain 密钥、`~/.wx-cli`、`.local-debug/`、日志和真实截图不得提交到 Git。未经用户要求，不提交、不推送、不创建 PR。
 
 ## 上游与致谢
 

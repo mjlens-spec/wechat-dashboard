@@ -19,6 +19,8 @@ import Sidebar from '@/components/Sidebar';
 type AttentionStatus = 'open' | 'handled' | 'dismissed';
 type AttentionItem = {
   id: string;
+  platform: 'wechat' | 'feishu';
+  chat_type: 'group' | 'private';
   group_name: string;
   category:
     | 'mention'
@@ -46,6 +48,7 @@ type AttentionResponse = {
   intelligence: {
     analysis_model: string | null;
     display_model: string | null;
+    display_reasoning?: string | null;
     imported_at: number | null;
   } | null;
 };
@@ -119,7 +122,7 @@ export default function AttentionPage() {
                 <div className="report-kicker">30 Min · Agent Intelligence</div>
                 <h1>重点关注提示</h1>
                 <p>
-                  聚焦需要你留意或介入的群聊信息，普通闲聊不会进入提示。
+                  左侧先看微信，右侧查看飞书；群聊与已授权私信使用同一套证据标准。
                 </p>
               </div>
             </div>
@@ -149,7 +152,10 @@ export default function AttentionPage() {
             <CountCard
               icon={<BrainCircuit size={16} />}
               label="分析引擎"
-              value={modelLabel(data?.intelligence?.display_model)}
+              value={modelLabel(
+                data?.intelligence?.display_model,
+                data?.intelligence?.display_reasoning,
+              )}
               text
             />
           </div>
@@ -174,18 +180,54 @@ export default function AttentionPage() {
 
           {error && <div className="mt-4 rounded-md bg-[var(--danger-soft)] px-4 py-3 text-[13px] text-[var(--danger)]">{error}</div>}
 
-          {!loading && visible.length === 0 ? (
-            <EmptyState filter={filter} />
-          ) : (
-            <div className="attention-list">
-              {visible.map((alert) => (
-                <AttentionCard key={alert.id} alert={alert} onStatus={updateStatus} />
-              ))}
-            </div>
-          )}
+          <div className="attention-platform-grid">
+            <AttentionColumn
+              platform="wechat"
+              alerts={visible.filter((alert) => alert.platform === 'wechat')}
+              onStatus={updateStatus}
+            />
+            <AttentionColumn
+              platform="feishu"
+              alerts={visible.filter((alert) => alert.platform === 'feishu')}
+              onStatus={updateStatus}
+            />
+          </div>
         </div>
       </main>
     </div>
+  );
+}
+
+function AttentionColumn({
+  platform,
+  alerts,
+  onStatus,
+}: {
+  platform: 'wechat' | 'feishu';
+  alerts: AttentionItem[];
+  onStatus: (id: string, status: AttentionStatus) => Promise<void>;
+}) {
+  return (
+    <section className="attention-platform-column">
+      <header className="platform-dashboard-header compact-platform-header">
+        <span className={`platform-chip platform-chip-${platform}`}>
+          {platform === 'wechat' ? '微信' : '飞书'}
+        </span>
+        <div>
+          <h2>{platform === 'wechat' ? '微信重点关注' : '飞书重点关注'}</h2>
+          <p>{alerts.length} 项</p>
+        </div>
+      </header>
+      <div className="attention-list">
+        {alerts.length ? (
+          alerts.map((alert) => (
+            <AttentionCard key={alert.id} alert={alert} onStatus={onStatus} />
+          ))
+        ) : (
+          <div className="modern-empty compact-empty"><p>当前没有相关提示。</p></div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -213,7 +255,7 @@ function AttentionCard({ alert, onStatus }: { alert: AttentionItem; onStatus: (i
                 <span className={`text-[10px] font-semibold uppercase ${isUrgent ? 'text-[var(--danger)]' : 'text-[var(--accent)]'}`}>{severityLabel(alert.severity)}</span>
               </div>
               <h2>{alert.title}</h2>
-              <div className="mt-1 text-[11px] text-[var(--text-3)]">{alert.group_name} · {formatTime(alert.last_detected_at)} · {alert.evidence_count} 条证据</div>
+              <div className="mt-1 text-[11px] text-[var(--text-3)]">{alert.group_name} · {alert.chat_type === 'group' ? '群聊' : '私信'} · {formatTime(alert.last_detected_at)} · {alert.evidence_count} 条证据</div>
             </div>
           </div>
         </div>
@@ -236,18 +278,6 @@ function AttentionCard({ alert, onStatus }: { alert: AttentionItem; onStatus: (i
   );
 }
 
-function EmptyState({ filter }: { filter: AttentionStatus }) {
-  return (
-    <div className="modern-empty">
-      <BellRing size={28} className="text-[var(--accent)]" />
-      <h2 className="mt-3 text-[16px] font-semibold">{{ open: '目前没有待关注提示', handled: '还没有已处理提示', dismissed: '还没有已忽略提示' }[filter]}</h2>
-      <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-[var(--text-3)]">
-        当前分析引擎会结合语义、上下文和消息时间判断，规则命中只作为候选线索。
-      </p>
-    </div>
-  );
-}
-
 function categoryIcon(category: AttentionItem['category']) {
   if (category === 'mention') return <AtSign size={16} />;
   if (category === 'no_response' || category === 'no_solution') return <Clock3 size={16} />;
@@ -259,9 +289,12 @@ function severityLabel(severity: AttentionItem['severity']) {
   return { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }[severity];
 }
 
-function modelLabel(model: string | null | undefined) {
-  if (model?.includes('luna')) return 'Luna Max';
-  if (model?.includes('terra')) return 'Terra Max';
+function modelLabel(
+  model: string | null | undefined,
+  reasoning: string | null | undefined,
+) {
+  if (model?.includes('terra') && reasoning === 'high') return 'Terra High';
+  if (model?.includes('terra')) return 'Terra · 历史记录';
   return model || '待运行';
 }
 

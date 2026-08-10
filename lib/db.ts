@@ -4,7 +4,7 @@ import { DATA_DIR, secureDataDirectory } from './config';
 import { createPrivateFile, securePrivateFile } from './private-paths.mjs';
 
 export const DB_PATH = join(/*turbopackIgnore: true*/ DATA_DIR, 'dashboard.db');
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 let database: Database.Database | null = null;
 
@@ -36,7 +36,55 @@ export function secureDatabaseFiles() {
 function migrate(target: Database.Database) {
   rejectPlaintextLegacyDatabase(target);
   createCurrentSchema(target);
+  migratePlatformSchema(target);
   target.pragma(`user_version = ${SCHEMA_VERSION}`);
+}
+
+function migratePlatformSchema(target: Database.Database) {
+  const addColumn = (table: string, column: string, definition: string) => {
+    const columns = target.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+      name: string;
+    }>;
+    if (!columns.some((entry) => entry.name === column)) {
+      target.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  };
+
+  addColumn(
+    'conversations',
+    'platform',
+    "TEXT NOT NULL DEFAULT 'wechat' CHECK (platform IN ('wechat', 'feishu'))",
+  );
+  addColumn('conversations', 'source_id', "TEXT NOT NULL DEFAULT ''");
+  target.exec(`
+    UPDATE conversations SET source_id = id WHERE source_id = '';
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_platform_source
+      ON conversations(platform, source_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_platform_type_activity
+      ON conversations(platform, chat_type, last_activity DESC);
+  `);
+
+  addColumn('messages', 'source_message_id', 'TEXT');
+  addColumn('messages', 'edited', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('messages', 'deleted', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('messages', 'source_updated_at', 'INTEGER');
+  target.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_source_id
+      ON messages(chatroom_id, source_message_id)
+      WHERE source_message_id IS NOT NULL;
+  `);
+
+  addColumn('analysis_jobs', 'reasoning_effort', 'TEXT');
+  addColumn(
+    'group_summaries',
+    'reasoning_effort',
+    "TEXT NOT NULL DEFAULT 'unknown'",
+  );
+  addColumn(
+    'attention_alerts',
+    'reasoning_effort',
+    "TEXT NOT NULL DEFAULT 'unknown'",
+  );
 }
 
 function rejectPlaintextLegacyDatabase(target: Database.Database) {
@@ -79,6 +127,9 @@ function createCurrentSchema(target: Database.Database) {
   target.exec(`
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
+      platform TEXT NOT NULL DEFAULT 'wechat'
+        CHECK (platform IN ('wechat', 'feishu')),
+      source_id TEXT NOT NULL DEFAULT '',
       name_cipher TEXT NOT NULL,
       chat_type TEXT NOT NULL CHECK (chat_type IN ('group', 'private')),
       summary_cipher TEXT NOT NULL DEFAULT '',
@@ -97,6 +148,7 @@ function createCurrentSchema(target: Database.Database) {
     CREATE TABLE IF NOT EXISTS messages (
       chatroom_id TEXT NOT NULL,
       message_id TEXT NOT NULL,
+      source_message_id TEXT,
       local_id INTEGER,
       fingerprint TEXT NOT NULL,
       sender_cipher TEXT NOT NULL,
@@ -105,6 +157,9 @@ function createCurrentSchema(target: Database.Database) {
       timestamp INTEGER NOT NULL,
       type TEXT NOT NULL,
       date TEXT NOT NULL,
+      edited INTEGER NOT NULL DEFAULT 0,
+      deleted INTEGER NOT NULL DEFAULT 0,
+      source_updated_at INTEGER,
       PRIMARY KEY (chatroom_id, message_id),
       FOREIGN KEY (chatroom_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
@@ -204,6 +259,7 @@ function createCurrentSchema(target: Database.Database) {
       expires_at INTEGER NOT NULL,
       imported_at INTEGER,
       analysis_model TEXT,
+      reasoning_effort TEXT,
       error_code TEXT
     );
 
@@ -237,6 +293,7 @@ function createCurrentSchema(target: Database.Database) {
       evidence_ids TEXT NOT NULL,
       message_count INTEGER NOT NULL DEFAULT 0,
       analysis_model TEXT NOT NULL,
+      reasoning_effort TEXT NOT NULL DEFAULT 'unknown',
       generated_at INTEGER NOT NULL,
       job_id TEXT NOT NULL,
       PRIMARY KEY (day, chatroom_id),
@@ -266,6 +323,7 @@ function createCurrentSchema(target: Database.Database) {
       status TEXT NOT NULL DEFAULT 'open'
         CHECK (status IN ('open', 'handled', 'dismissed')),
       analysis_model TEXT NOT NULL,
+      reasoning_effort TEXT NOT NULL DEFAULT 'unknown',
       first_detected_at INTEGER NOT NULL,
       last_detected_at INTEGER NOT NULL,
       handled_at INTEGER,
@@ -276,5 +334,38 @@ function createCurrentSchema(target: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_attention_alerts_day_status_severity
       ON attention_alerts(day, status, severity, last_detected_at DESC);
+
+    CREATE TABLE IF NOT EXISTS business_opportunities (
+      id TEXT PRIMARY KEY,
+      day TEXT NOT NULL,
+      chatroom_id TEXT NOT NULL,
+      category TEXT NOT NULL CHECK (
+        category IN (
+          'new_demand', 'budget_signal', 'collaboration',
+          'upsell', 'referral', 'renewal'
+        )
+      ),
+      confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+      title_cipher TEXT NOT NULL,
+      detail_cipher TEXT NOT NULL,
+      business_value_cipher TEXT NOT NULL,
+      suggested_action_cipher TEXT NOT NULL,
+      owner_cipher TEXT NOT NULL DEFAULT '',
+      due_cipher TEXT NOT NULL DEFAULT '',
+      evidence_ids TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'new'
+        CHECK (status IN ('new', 'following', 'converted', 'dismissed')),
+      analysis_model TEXT NOT NULL,
+      reasoning_effort TEXT NOT NULL DEFAULT 'unknown',
+      first_detected_at INTEGER NOT NULL,
+      last_detected_at INTEGER NOT NULL,
+      handled_at INTEGER,
+      job_id TEXT NOT NULL,
+      FOREIGN KEY (chatroom_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (job_id) REFERENCES analysis_jobs(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_business_opportunities_day_status
+      ON business_opportunities(day, status, confidence DESC, last_detected_at DESC);
   `);
 }

@@ -5,6 +5,7 @@ import {
   normalizePriorityKeyword,
   prioritizeGroupRecords,
 } from './conversation-priority-policy.mjs';
+import type { Platform, PlatformFilter } from './conversations';
 
 const MAX_PRIORITY_KEYWORDS = 24;
 const MAX_SCANNED_MESSAGES = 10_000;
@@ -15,6 +16,7 @@ export type PriorityKeyword = { id: string; keyword: string };
 
 export type PriorityGroup = {
   id: string;
+  platform: Platform;
   name: string;
   chat_type: 'group';
   summary: string;
@@ -32,6 +34,7 @@ export type PriorityGroup = {
 
 type EncryptedGroupRow = {
   id: string;
+  platform: Platform;
   name_cipher: string;
   summary_cipher: string;
   last_sender_cipher: string;
@@ -63,11 +66,12 @@ export function priorityWorkspace(
   since: string,
   until: string,
   search: string,
+  platform: PlatformFilter = 'all',
 ) {
   const groupRows = db()
     .prepare(
       `SELECT
-         c.id, c.name_cipher, c.summary_cipher, c.last_sender_cipher,
+         c.id, c.platform, c.name_cipher, c.summary_cipher, c.last_sender_cipher,
          c.last_time, c.last_activity, c.unread,
          COUNT(m.message_id) AS message_count,
          COALESCE(p.starred, 0) AS starred
@@ -78,10 +82,11 @@ export function priorityWorkspace(
         AND m.date <= @until
        LEFT JOIN conversation_preferences p ON p.chatroom_id = c.id
        WHERE c.chat_type = 'group'
+         AND (@platform = 'all' OR c.platform = @platform)
        GROUP BY c.id
        ORDER BY c.last_activity DESC`,
     )
-    .all({ since, until }) as EncryptedGroupRow[];
+    .all({ since, until, platform }) as EncryptedGroupRow[];
 
   const keywords = listPriorityKeywords();
   const shouldScanMessages = Boolean(search.trim() || keywords.length > 0);
@@ -91,11 +96,13 @@ export function priorityWorkspace(
           `SELECT m.chatroom_id, m.message_id, m.content_cipher
            FROM messages m
            JOIN conversations c ON c.id = m.chatroom_id
-           WHERE c.chat_type = 'group' AND m.date >= ? AND m.date <= ?
+           WHERE c.chat_type = 'group'
+             AND (? = 'all' OR c.platform = ?)
+             AND m.date >= ? AND m.date <= ?
            ORDER BY m.timestamp DESC
            LIMIT ?`,
         )
-        .all(since, until, MAX_SCANNED_MESSAGES) as EncryptedMessageRow[])
+        .all(platform, platform, since, until, MAX_SCANNED_MESSAGES) as EncryptedMessageRow[])
     : [];
 
   const messageCorpus = new Map<string, string>();
@@ -118,6 +125,7 @@ export function priorityWorkspace(
 
   const records = groupRows.map((row) => ({
     id: row.id,
+    platform: row.platform,
     name: decryptOrPlaceholder(row.name_cipher, `conversation:name:${row.id}`),
     chat_type: 'group' as const,
     summary: decryptOrPlaceholder(row.summary_cipher, `conversation:summary:${row.id}`),
@@ -141,6 +149,7 @@ export function priorityWorkspace(
   }) as Array<PriorityGroup & { messageText: string; messageCount: number; lastActivity: number }>;
   const groups: PriorityGroup[] = prioritized.map((group) => ({
     id: group.id,
+    platform: group.platform,
     name: group.name,
     chat_type: group.chat_type,
     summary: group.summary,

@@ -5,7 +5,7 @@ import { createAnalysisExport } from '@/lib/intelligence-store';
 export const dynamic = 'force-dynamic';
 
 const RequestSchema = z.object({
-  mode: z.enum(['scheduled', 'summaries', 'alerts']).default('scheduled'),
+  mode: z.enum(['scheduled', 'summaries', 'alerts', 'opportunities']).default('scheduled'),
 });
 
 export async function POST(request: NextRequest) {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       {
         status: 'error',
         code: 'ANALYSIS_EXPORT_FAILED',
-        error: '无法准备本机群聊分析上下文。',
+        error: '无法准备本机双端会话分析上下文。',
       },
       { status: 500 },
     );

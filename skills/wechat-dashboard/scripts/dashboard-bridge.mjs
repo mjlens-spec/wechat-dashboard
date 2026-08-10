@@ -98,16 +98,16 @@ try {
 }
 
 async function prepare(mode, service) {
-  if (!['scheduled', 'summaries', 'alerts'].includes(mode)) {
+  if (!['scheduled', 'summaries', 'alerts', 'opportunities'].includes(mode)) {
     fail('INVALID_MODE', `Unsupported analysis mode: ${mode}`, [
-      'Use scheduled, summaries, or alerts.',
+      'Use scheduled, summaries, alerts, or opportunities.',
     ]);
   }
 
   const warnings = [];
   try {
     const sync = await syncLocalMessages();
-    if (sync?.status === 'partial') warnings.push('最近一次微信增量同步只完成了一部分。');
+    if (sync?.status === 'partial') warnings.push('最近一次双端增量同步只完成了一部分。');
   } catch (error) {
     if (error instanceof BridgeFailure && error.code === 'DASHBOARD_UNREACHABLE') throw error;
     warnings.push('本次增量同步失败，分析将使用最近一次可用的本地快照。');
@@ -133,9 +133,11 @@ async function prepare(mode, service) {
   const resultPath = join(privateDir, 'result.json');
   writePrivateJson(contextPath, exported.context);
   writePrivateJson(resultPath, {
-    model: 'replace-with-actual-model',
+    model: 'gpt-5.6-terra',
+    reasoning_effort: 'high',
     summaries: [],
     alerts: [],
+    opportunities: [],
   });
 
   print({
@@ -154,8 +156,8 @@ async function prepare(mode, service) {
       id: exported.context.job.id,
       mode: exported.context.job.mode,
       requested_outputs: exported.context.job.requested_outputs,
-      group_count: exported.context.groups.length,
-      message_count: exported.context.groups.reduce(
+      conversation_count: exported.context.conversations.length,
+      message_count: exported.context.conversations.reduce(
         (total, group) => total + group.context_message_count,
         0,
       ),

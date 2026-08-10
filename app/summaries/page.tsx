@@ -18,6 +18,8 @@ type SummaryItem = {
   day: string;
   group_id: string;
   group_name: string;
+  platform: 'wechat' | 'feishu';
+  chat_type: 'group' | 'private';
   overview: string;
   highlights: string[];
   decisions: string[];
@@ -43,6 +45,7 @@ type SummaryResponse = {
     status: string;
     analysis_model: string | null;
     display_model: string | null;
+    display_reasoning?: string | null;
     imported_at: number | null;
   } | null;
 };
@@ -86,9 +89,9 @@ export default function SummariesPage() {
               <FileText size={18} className="mt-1 text-[var(--accent)]" />
               <div>
                 <div className="report-kicker">30 Min · Agent Intelligence</div>
-                <h1>群聊汇总</h1>
+                <h1>会话汇总</h1>
                 <p>
-                  各个群聊独立汇总；Skill 运行且页面打开时，每 30 分钟由当前分析引擎更新当天进展。
+                  微信与飞书分区展示；每个群聊或私信独立汇总，每 30 分钟由 Terra High 更新。
                 </p>
               </div>
             </div>
@@ -117,15 +120,26 @@ export default function SummariesPage() {
               {error}
             </div>
           )}
-          {!loading && data?.summaries.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <div className="summary-list">
-              {data?.summaries.map((summary) => (
-                <GroupSummaryCard key={summary.group_id} summary={summary} />
-              ))}
-            </div>
-          )}
+          <div className="summary-platform-grid">
+            {(['wechat', 'feishu'] as const).map((platform) => {
+              const summaries = data?.summaries.filter((summary) => summary.platform === platform) ?? [];
+              return (
+                <section className="summary-platform-section" key={platform}>
+                  <header className="platform-dashboard-header compact-platform-header">
+                    <span className={`platform-chip platform-chip-${platform}`}>{platform === 'wechat' ? '微信' : '飞书'}</span>
+                    <div><h2>{platform === 'wechat' ? '微信会话汇总' : '飞书会话汇总'}</h2></div>
+                  </header>
+                  <div className="summary-list">
+                    {summaries.length ? summaries.map((summary) => (
+                      <GroupSummaryCard key={summary.group_id} summary={summary} />
+                    )) : (
+                      <div className="modern-empty compact-empty"><p>{loading ? '正在读取会话汇总…' : '当前没有该平台的会话汇总。'}</p></div>
+                    )}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
         </div>
       </main>
     </div>
@@ -137,7 +151,12 @@ function StatusStrip({ data }: { data: SummaryResponse | null }) {
     <div className="engine-strip">
       <div className="flex items-center gap-2 text-[13px] text-[var(--text-2)]">
         <BrainCircuit size={15} className="text-[var(--accent)]" />
-        <span>分析引擎：{data?.intelligence?.display_model ?? '等待首次分析'}</span>
+        <span>
+          分析引擎：{displayModel(
+            data?.intelligence?.display_model,
+            data?.intelligence?.display_reasoning,
+          )}
+        </span>
       </div>
       <div className="text-[12px] text-[var(--text-3)]">
         {data?.last_generated_at
@@ -159,7 +178,7 @@ function GroupSummaryCard({ summary }: { summary: SummaryItem }) {
           <div className="min-w-0">
             <h2 className="truncate text-[16px] font-semibold">{summary.group_name}</h2>
             <div className="mt-1 text-[11px] text-[var(--text-3)]">
-              独立群聊汇总 · {summary.evidence_count} 条证据 · {formatTime(summary.generated_at)}
+              独立{summary.chat_type === 'group' ? '群聊' : '私信'}汇总 · {summary.evidence_count} 条证据 · {formatTime(summary.generated_at)}
             </div>
           </div>
         </div>
@@ -241,19 +260,6 @@ function ActionSection({ items }: { items: SummaryItem['action_items'] }) {
   );
 }
 
-function EmptyState() {
-  return (
-    <div className="modern-empty">
-      <BrainCircuit size={28} className="text-[var(--accent)]" />
-      <h2 className="mt-3 text-[16px] font-semibold">等待 Codex 生成今日群聊汇总</h2>
-      <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-[var(--text-3)]">
-        在 Codex 中调用 <code className="rounded bg-[var(--surface-2)] px-1.5 py-0.5">$wechat-dashboard</code>。
-        Skill 会读取受限的本机群聊上下文，并把每个群的独立汇总写回这里。
-      </p>
-    </div>
-  );
-}
-
 function localToday() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -266,4 +272,13 @@ function formatTime(timestamp: number) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function displayModel(
+  model: string | null | undefined,
+  reasoning: string | null | undefined,
+) {
+  if (model?.includes('terra') && reasoning === 'high') return 'Terra High';
+  if (model?.includes('terra')) return 'Terra · 历史强度未记录';
+  return model || '等待首次分析';
 }

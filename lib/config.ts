@@ -23,6 +23,9 @@ export interface Config {
   defaultSyncDays: number;
   autoSyncMinutes: number;
   accountDirectory: string | null;
+  feishuEnabled: boolean;
+  analyzeWeChatPrivate: boolean;
+  analyzeFeishuPrivate: boolean;
 }
 
 function envNames(): string[] {
@@ -42,6 +45,9 @@ const DEFAULTS: Config = {
   defaultSyncDays: 7,
   autoSyncMinutes: 30,
   accountDirectory: null,
+  feishuEnabled: true,
+  analyzeWeChatPrivate: false,
+  analyzeFeishuPrivate: false,
 };
 
 export function readConfig(): Config {

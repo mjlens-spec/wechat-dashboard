@@ -3,8 +3,8 @@ import SessionHeartbeat from '@/components/SessionHeartbeat';
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WeChat Dashboard",
-  description: "Private local dashboard for macOS WeChat group and private chats",
+  title: "Chat Dashboard · 微信与飞书分析",
+  description: "Private local dashboard for encrypted WeChat and Feishu chat analysis",
 };
 
 export default function RootLayout({
