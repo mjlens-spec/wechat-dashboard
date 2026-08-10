@@ -13,7 +13,7 @@ function run_check() {
 function run_optional() {
   print "\n— $1"
   shift
-  "$@" || print "尚未就绪；请按《首次连接双端》处理。"
+  "$@" || print "尚未就绪；请按 CONNECT_WECHAT_FEISHU.md 处理。"
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || { print -u2 "只支持 macOS。"; exit 1; }

@@ -46,7 +46,7 @@ print "\n[4/8] 收紧本地隐私目录权限…"
 pnpm privacy:harden || fail "隐私目录权限检查失败。"
 
 print "\n[5/8] 检查微信读取器…"
-pnpm reader:inspect || print "微信读取器尚未就绪；稍后按《首次连接双端》逐机配置。"
+pnpm reader:inspect || print "微信读取器尚未就绪；稍后按 CONNECT_WECHAT_FEISHU.md 逐机配置。"
 
 print "\n[6/8] 构建 production Dashboard…"
 pnpm build || fail "Dashboard 构建失败。"
@@ -61,6 +61,6 @@ pnpm session:start || fail "Dashboard 启动失败。"
 open "http://127.0.0.1:3000/setup"
 
 print "\n代码、依赖、构建和 Skill 安装已经完成。"
-print "下一步：按照《首次连接双端》完成这台 Mac 自己的微信读取器与飞书用户授权。"
+print "下一步：按照 CONNECT_WECHAT_FEISHU.md 完成这台 Mac 自己的微信读取器与飞书用户授权。"
 print "之后在 Codex 中输入：\$wechat-dashboard"
 read -r "?按回车关闭窗口…"

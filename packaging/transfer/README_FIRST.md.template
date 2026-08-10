@@ -6,10 +6,10 @@
 
 ## 最快安装方法
 
-1. 把整个“微信飞书消息分析 Dashboard”文件夹放到准备长期保留的位置，例如 `~/Documents/微信飞书消息分析 Dashboard`。安装后不要移动其中的项目文件夹，因为 Agent Skill 会链接到该目录。
+1. 把整个 `wechat-feishu-message-analysis-dashboard-v{{VERSION}}` 文件夹放到准备长期保留的位置，例如 `~/Documents/`。安装后不要移动其中的项目文件夹，因为 Agent Skill 会链接到该目录。
 2. 确认微信 Mac 版已经正常登录。安装过程不会退出、重启、重签或修改微信。
-3. 双击 `安装并启动.command`。如果 macOS 阻止直接运行，可以右键该文件并选择“打开”。
-4. 安装结束后，按照 `首次连接双端.md` 分别检查微信读取器与飞书用户授权。
+3. 双击 `INSTALL.command`。如果 macOS 阻止直接运行，可以右键该文件并选择“打开”。
+4. 安装结束后，按照 `CONNECT_WECHAT_FEISHU.md` 分别检查微信读取器与飞书用户授权。
 5. 在 Codex 输入 `$wechat-dashboard`；Skill 会启动只监听本机的临时 Dashboard，并打开 `/setup`。
 
 ## 核心边界
@@ -24,9 +24,9 @@
 ## 目录
 
 - `wechat-feishu-message-analysis-dashboard/`：完整项目源码和 Skill。
-- `安装并启动.command`：安装依赖、飞书 CLI、构建项目、安装 Skill 并启动本机页面。
-- `检查安装.command`：只读检查当前 Mac 的安装与授权状态。
-- `首次连接双端.md`：微信与飞书逐机接入步骤。
-- `移交清单.md`：版本、组件、排除项和安全边界。
+- `INSTALL.command`：安装依赖、飞书 CLI、构建项目、安装 Skill 并启动本机页面。
+- `CHECK.command`：只读检查当前 Mac 的安装与授权状态。
+- `CONNECT_WECHAT_FEISHU.md`：微信与飞书逐机接入步骤。
+- `TRANSFER_CHECKLIST.md`：版本、组件、排除项和安全边界。
 - `RELEASE_MANIFEST.json`：产品版本、Git 提交与生成时间。
 - `SHA256SUMS.txt`：包内所有文件的 SHA-256 清单。

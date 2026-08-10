@@ -23,9 +23,10 @@ const productName = '微信飞书消息分析 Dashboard';
 const projectFolderName = 'wechat-feishu-message-analysis-dashboard';
 const releaseDirectory = join(projectRoot, '.release');
 const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'));
+const packageRootName = `${projectFolderName}-v${packageJson.version}`;
 const commit = git(['rev-parse', 'HEAD']).trim();
 const stagingRoot = mkdtempSync(join(tmpdir(), 'wechat-feishu-transfer-'));
-const packageRoot = join(stagingRoot, productName);
+const packageRoot = join(stagingRoot, packageRootName);
 const packagedProject = join(packageRoot, projectFolderName);
 
 assertCleanWorktree();
@@ -77,7 +78,7 @@ try {
 
   verifyGeneratedScripts(packageRoot);
   verifyChecksumManifest(packageRoot);
-  execFileSync('/usr/bin/zip', ['-qry', tempZip, productName], { cwd: stagingRoot });
+  execFileSync('/usr/bin/zip', ['-qry', tempZip, packageRootName], { cwd: stagingRoot });
   execFileSync('/usr/bin/unzip', ['-tqq', tempZip]);
   verifyArchiveContents(tempZip);
   renameSync(tempZip, outputPath);
@@ -137,7 +138,7 @@ function nextArtifactStem(version) {
 }
 
 function verifyGeneratedScripts(root) {
-  for (const name of ['安装并启动.command', '检查安装.command']) {
+  for (const name of ['INSTALL.command', 'CHECK.command']) {
     execFileSync('/bin/zsh', ['-n', join(root, name)]);
   }
 }
@@ -154,16 +155,16 @@ function verifyArchiveContents(path) {
     .filter(Boolean);
   const normalizedEntries = new Set(entries.map((entry) => entry.normalize('NFC')));
   const required = [
-    `${productName}/先读我.md`,
-    `${productName}/安装并启动.command`,
-    `${productName}/首次连接双端.md`,
-    `${productName}/SHA256SUMS.txt`,
-    `${productName}/${projectFolderName}/package.json`,
-    `${productName}/${projectFolderName}/pnpm-lock.yaml`,
-    `${productName}/${projectFolderName}/TRANSFER.md`,
-    `${productName}/${projectFolderName}/lib/feishu.ts`,
-    `${productName}/${projectFolderName}/lib/feishu-sync.ts`,
-    `${productName}/${projectFolderName}/app/opportunities/page.tsx`,
+    `${packageRootName}/README_FIRST.md`,
+    `${packageRootName}/INSTALL.command`,
+    `${packageRootName}/CONNECT_WECHAT_FEISHU.md`,
+    `${packageRootName}/SHA256SUMS.txt`,
+    `${packageRootName}/${projectFolderName}/package.json`,
+    `${packageRootName}/${projectFolderName}/pnpm-lock.yaml`,
+    `${packageRootName}/${projectFolderName}/TRANSFER.md`,
+    `${packageRootName}/${projectFolderName}/lib/feishu.ts`,
+    `${packageRootName}/${projectFolderName}/lib/feishu-sync.ts`,
+    `${packageRootName}/${projectFolderName}/app/opportunities/page.tsx`,
   ];
   for (const entry of required) {
     if (!normalizedEntries.has(entry.normalize('NFC'))) {
