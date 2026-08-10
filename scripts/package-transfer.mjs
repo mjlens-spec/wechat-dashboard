@@ -138,7 +138,7 @@ function nextArtifactStem(version) {
 }
 
 function verifyGeneratedScripts(root) {
-  for (const name of ['INSTALL.command', 'CHECK.command']) {
+  for (const name of ['INSTALL.command', 'CHECK.command', 'RUNTIME.zsh']) {
     execFileSync('/bin/zsh', ['-n', join(root, name)]);
   }
 }
@@ -156,7 +156,11 @@ function verifyArchiveContents(path) {
   const normalizedEntries = new Set(entries.map((entry) => entry.normalize('NFC')));
   const required = [
     `${packageRootName}/README_FIRST.md`,
+    `${packageRootName}/AGENTS.md`,
     `${packageRootName}/INSTALL.command`,
+    `${packageRootName}/CHECK.command`,
+    `${packageRootName}/RUNTIME.zsh`,
+    `${packageRootName}/INSTALLATION_GUIDE.md`,
     `${packageRootName}/CONNECT_WECHAT_FEISHU.md`,
     `${packageRootName}/SHA256SUMS.txt`,
     `${packageRootName}/${projectFolderName}/package.json`,
@@ -178,6 +182,7 @@ function verifyArchiveContents(path) {
       segments.includes('.git') ||
       segments.includes('node_modules') ||
       segments.includes('.next') ||
+      segments.includes('.runtime') ||
       segments.includes('.local-debug') ||
       segments.includes('.playwright-cli') ||
       normalized.includes('WeChat_Dashboard_Context_Handoff') ||

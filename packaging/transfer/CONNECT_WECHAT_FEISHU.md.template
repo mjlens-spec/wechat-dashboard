@@ -12,12 +12,12 @@
 
 ## 2. 飞书用户授权
 
-移交包安装的是飞书官方 `lark-cli`。首次使用需要当前用户在浏览器完成一次应用配置和 IM 域授权：
+移交包把飞书官方 `lark-cli` 锁定在项目依赖中。先进入包内的 `wechat-feishu-message-analysis-dashboard` 项目目录；首次使用需要当前用户在浏览器完成一次应用配置和 IM 域授权：
 
 ```bash
-lark-cli config init --new
-lark-cli auth login --domain im
-lark-cli auth status --json --verify
+pnpm exec lark-cli config init --new
+pnpm exec lark-cli auth login --domain im
+pnpm exec lark-cli auth status --json --verify
 ```
 
 `--domain im` 会请求完整的飞书消息域权限；Dashboard 实际只调用群聊、私信和消息搜索的读取命令，并在每次调用中强制 `--as user`。如果组织管理员要求审核应用或权限，需要先完成审批，再重新执行登录命令。
@@ -32,7 +32,11 @@ Dashboard 核心读取权限包括：
 
 飞书令牌由 CLI 和 macOS Keychain 管理，不写入项目、Dashboard 数据库或配置文件。
 
-## 3. Dashboard 设置
+## 3. Codex 与 Terra High
+
+ChatGPT Pro 订阅可使用 Codex，但模型清单仍由接收方当前的 Codex 客户端、账户与工作区配置决定。调用 `$wechat-dashboard` 时，Skill 会优先使用隔离的 `gpt-5.6-terra`、reasoning `high` 执行语义分析。若宿主不支持该模型覆盖或无法明确确认当前任务为 Terra High，页面和双端只读同步仍可使用，语义导入会以 `TERRA_HIGH_UNAVAILABLE` 停止。
+
+## 4. Dashboard 设置
 
 1. 在 `/setup` 确认两端检查状态。
 2. 勾选本机隐私说明。
@@ -41,7 +45,7 @@ Dashboard 核心读取权限包括：
 5. 填写本人在工作群中可能出现的昵称，用于识别“@ 我”。
 6. 保存设置后调用 `$wechat-dashboard`。
 
-## 4. 成功标准
+## 5. 成功标准
 
 - 微信与飞书会话均能以匿名计数完成同步；
 - 总览按微信、飞书分区，重点关注页左微信、右飞书；

@@ -6,11 +6,12 @@
 - Release：v{{VERSION}}
 - Git 提交：`{{COMMIT}}`
 - 目标系统：macOS
-- 前端与本地服务：Next.js 16.2.6、React 19.2.4、TypeScript
+- 前端与本地服务：Next.js 16.2.11、React 19.2.4、TypeScript
 - 数据库：SQLite / better-sqlite3 12.x
 - 微信读取器：`@jackwener/wx-cli` 0.3.0
-- 飞书读取器：官方 `@larksuite/cli` 1.0.84 或更高版本，user 身份
+- 飞书读取器：项目内锁定官方 `@larksuite/cli` 1.0.84，user 身份
 - 包管理器：pnpm 11.16.0，依赖版本由 `pnpm-lock.yaml` 固定
+- 运行环境：兼容现有 Node.js 20.9+；缺失时自举并校验项目专用 Node.js 22.23.1
 
 ## 已包含
 
@@ -19,13 +20,14 @@
 - 30 分钟页面增量刷新与按需会话租约；
 - 双端逐会话汇总、重点关注提示和潜在商机；
 - Terra High 强制契约、evidence 归属验证和加密导入；
-- `skills/wechat-dashboard` Codex / Claude Code Skill；
+- `skills/wechat-dashboard` Codex Skill 与隔离安装验收；
 - 安装、权限、读取器、安全、打包与验证脚本；
-- README、移交、隐私、安全和协作文档。
+- README、完整安装与 Codex 接管指南、移交、隐私、安全和协作文档。
 
 ## 主动排除
 
 - `.git/`、`node_modules/`、`.next/`、构建缓存；
+- `.runtime/` 项目专用运行时缓存；
 - `.env`、本地数据库、WAL / SHM、备份和日志；
 - 个人项目 Handoff、机器调查记录和真实截图；
 - `~/.wechat-dashboard/` 与 `~/.wx-cli/` 的全部内容；

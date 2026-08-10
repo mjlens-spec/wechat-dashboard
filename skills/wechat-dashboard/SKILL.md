@@ -38,7 +38,7 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
 2. Always complete this section before running an analysis cycle. Do not rely on `prepare` to start the service implicitly.
 3. Run:
 
-   `node <skill-dir>/scripts/dashboard-bridge.mjs start --session-minutes 10`
+   `zsh <skill-dir>/scripts/run-bridge.zsh start --session-minutes 10`
 
 4. If local execution is sandbox-blocked, request approval and rerun the same command. Do not substitute a persistent service.
 5. Immediately open the returned loopback URL on every invocation, even when the user did not separately ask to see the Dashboard:
@@ -51,24 +51,28 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
 
 1. Run:
 
-   `node <skill-dir>/scripts/dashboard-bridge.mjs prepare --mode <mode> --session-minutes <10-or-35>`
+   `zsh <skill-dir>/scripts/run-bridge.zsh prepare --mode <mode> --session-minutes <10-or-35>`
 
    Use `10` for one immediate run and `35` when starting active monitoring.
 
 2. Inspect the compact JSON envelope. Stop on `status: "blocked"` and report its `summary` plus `next_actions`. Return on `status: "no_work"`.
-3. Read the entire private `context.json` artifact without printing it back to the user.
-4. Read [analysis-contract.md](references/analysis-contract.md) and create the exact result JSON at the `result_template` path. Use `apply_patch`; never place chat text in an inline shell command or heredoc.
-5. Analyze each conversation independently. Never merge multiple conversations into one summary. Include a summary only when that conversation has meaningful messages, using evidence from the same conversation.
-6. Use semantic judgment for alerts. Rule signals are candidate hints, not conclusions. Exclude ordinary chat, weak speculation, and issues resolved by later messages.
-7. Use exactly Terra High: model `gpt-5.6-terra`, reasoning `high`. Set `model` and `reasoning_effort` exactly to those values. Do not use Luna, another model, or a lower/higher effort. If Terra High is unavailable, stop the semantic cycle and leave the local sync result intact.
+3. Use exactly Terra High: model `gpt-5.6-terra`, reasoning `high`. Do not use Luna, another model, or a lower/higher effort.
+4. Prefer an isolated Terra High executor whenever the host exposes agent collaboration with model overrides:
+   - Spawn one worker with `model: gpt-5.6-terra`, `reasoning_effort: high`, and `fork_turns: none`.
+   - Give the worker only the absolute `context.json`, `result_template`, and [analysis-contract.md](references/analysis-contract.md) paths. Do not copy chat text into the task message.
+   - Tell the worker to read the entire context and contract, analyze each conversation independently, and create the exact result JSON with `apply_patch`.
+   - Wait for the worker to finish, then continue with import. The orchestrating agent must not replace or reinterpret the Terra result with another model.
+5. If model override is unavailable, continue locally only when the current task is explicitly running `gpt-5.6-terra` at reasoning `high`. If the host cannot prove that condition, stop the semantic cycle with `TERRA_HIGH_UNAVAILABLE`; leave the local sync result intact.
+6. Analyze each conversation independently. Never merge multiple conversations into one summary. Include a summary only when that conversation has meaningful messages, using evidence from the same conversation.
+7. Use semantic judgment for alerts. Rule signals are candidate hints, not conclusions. Exclude ordinary chat, weak speculation, and issues resolved by later messages.
 8. Run:
 
-   `node <skill-dir>/scripts/dashboard-bridge.mjs import --context <context-path> --result <result-path>`
+   `zsh <skill-dir>/scripts/run-bridge.zsh import --context <context-path> --result <result-path>`
 
 9. Confirm `status: "imported"`. Report imported counts and Dashboard pages only; do not quote source messages.
 10. Leave the opened Dashboard available for a short viewing window by running:
 
-    `node <skill-dir>/scripts/dashboard-bridge.mjs ensure --session-minutes 10`
+    `zsh <skill-dir>/scripts/run-bridge.zsh ensure --session-minutes 10`
 
     Do not stop the service immediately after a successful one-off import; it will still expire at the lease limit or shortly after all Dashboard pages close.
 
@@ -80,7 +84,7 @@ After the first successful cycle:
 2. Keep the current Terra High-capable Codex task active and wait 30 minutes without creating any scheduled automation.
 3. Run the next cycle with:
 
-   `node <skill-dir>/scripts/dashboard-bridge.mjs prepare --mode scheduled --session-minutes 35 --require-viewer true`
+   `zsh <skill-dir>/scripts/run-bridge.zsh prepare --mode scheduled --session-minutes 35 --require-viewer true`
 
 4. If the bridge returns `DASHBOARD_VIEWER_CLOSED`, stop the monitoring loop and do not restart the listener automatically.
 5. Otherwise analyze and import as above, then repeat while the task is active and the viewer remains open.
@@ -93,7 +97,7 @@ Before ending the Codex task, shorten the opened viewing session with `ensure --
 
 When the user asks to stop, run:
 
-`node <skill-dir>/scripts/dashboard-bridge.mjs stop`
+`zsh <skill-dir>/scripts/run-bridge.zsh stop`
 
 Only the verified supervisor PID for this project may be terminated. Never kill a PID whose command line does not match this Skill's session service and session ID.
 

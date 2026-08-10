@@ -50,11 +50,11 @@ Dashboard 和 Skill 不会执行以下动作：
 ## 运行条件
 
 - macOS；当前实测环境为 Apple Silicon 和微信 Mac 版 4.1.11。
-- Node.js 20 或更高版本、pnpm。
-- 飞书官方 `lark-cli` 1.0.84 或更高版本；凭证由 CLI 与 macOS Keychain 管理。
+- 源码开发要求 Node.js 20.9 或更高版本、pnpm 11.16.0；完整移交包可以自行准备并校验项目专用 Node.js 22.23.1 与 pnpm，无需接收方预装。
+- 项目内锁定飞书官方 `@larksuite/cli` 1.0.84；凭证由 CLI 与 macOS Keychain 管理。
 - 已配置并可读取当前账号的 `wx` 读取器。
 - `wx daemon` 正在运行，且 `~/.wx-cli` 只允许当前用户访问。
-- 本机 Codex 可调用 Terra High。
+- 本机 Codex 可调用 Terra High。ChatGPT Pro 可提供 Codex 使用资格，但项目仍会单独检查宿主是否实际支持 `gpt-5.6-terra`。
 
 ## 安装
 
@@ -68,14 +68,14 @@ pnpm reader:inspect
 pnpm build
 ```
 
-把仓库内 Skill 安装到当前用户的 Codex 和 Claude Code：
+把仓库内 Skill 安装到当前用户的 Codex：
 
 ```bash
-pnpm skill:install
-pnpm skill:check
+pnpm skill:install:codex
+pnpm skill:check:codex
 ```
 
-安装脚本只创建指向当前仓库 `skills/wechat-dashboard` 的符号链接；如果目标位置已有同名真实目录或指向其他位置的链接，它会拒绝覆盖。Codex 安装位置为 `~/.codex/skills/wechat-dashboard`，调用 `$wechat-dashboard`；Skill 的显示名称为“微信分析启动”，桌面端也可以输入 `/` 后从 Skill 列表选择。Claude Code 安装位置为 `~/.claude/skills/wechat-dashboard`，可启动本机页面与同步；若宿主无法使用 Terra High，语义结果不会导入。工程不依赖脱离列表选择流程的任意 `/微信分析启动` 文本别名。
+安装脚本只创建指向当前仓库 `skills/wechat-dashboard` 的符号链接；如果目标位置已有同名真实目录或指向其他位置的链接，它会拒绝覆盖。Codex 安装位置为 `~/.codex/skills/wechat-dashboard`，调用 `$wechat-dashboard`；Skill 的显示名称为“微信分析启动”，桌面端也可以输入 `/` 后从 Skill 列表选择。Skill 通过自己的运行入口寻找系统 Node.js 或移交包准备的项目专用 Node.js，因此后续调用不依赖终端的临时 PATH。工程不依赖脱离列表选择流程的任意 `/微信分析启动` 文本别名。
 
 每次调用 Skill 时都会先启动临时本机服务，并自动在内置浏览器或 Google Chrome 中打开 Dashboard；明确要求“停止”时例外。单轮分析完成后页面最多保留 10 分钟，关闭页面后临时服务仍会按短租约自动退出。
 
@@ -114,7 +114,7 @@ pnpm session:stop
 
 1. 启动本机临时 Dashboard，自动在内置浏览器或 Google Chrome 中打开页面，并增量同步消息。
 2. 从当天双端会话导出有界上下文：最多 80 个会话、每会话 160 条、总计 800 条，每条正文最多 1200 字符；私信必须显式开启。
-3. Terra High 按会话独立生成当天汇总、重点关注提示和潜在商机。
+3. Skill 优先创建隔离的 `gpt-5.6-terra`、reasoning `high` 执行单元，按会话独立生成当天汇总、重点关注提示和潜在商机；宿主无法提供该组合时停止语义导入。
 4. 每条结论引用匿名 evidence ID；导入时验证 evidence ID 属于同一任务和同一会话。
 5. 结果继续加密落盘；临时上下文和结果文件在成功导入后删除。
 
@@ -123,9 +123,9 @@ pnpm session:stop
 手动桥接命令：
 
 ```bash
-node skills/wechat-dashboard/scripts/dashboard-bridge.mjs prepare --mode summaries
-node skills/wechat-dashboard/scripts/dashboard-bridge.mjs prepare --mode alerts
-node skills/wechat-dashboard/scripts/dashboard-bridge.mjs prepare --mode opportunities
+zsh skills/wechat-dashboard/scripts/run-bridge.zsh prepare --mode summaries
+zsh skills/wechat-dashboard/scripts/run-bridge.zsh prepare --mode alerts
+zsh skills/wechat-dashboard/scripts/run-bridge.zsh prepare --mode opportunities
 ```
 
 桥接脚本拒绝非 loopback URL。
@@ -148,12 +148,12 @@ Dashboard 数据根目录固定为当前用户的 `~/.wechat-dashboard`，不接
 
 代码可迁移到少量内测用户的 Mac，但读取器、账号和密钥必须逐机独立准备：
 
-1. 从私有仓库克隆并安装依赖。
+1. 使用完整移交 ZIP 时双击 `INSTALL.command`；它会自检 macOS 架构和现有 Node.js，必要时下载并校验项目专用 Node.js 22.23.1，再安装锁定依赖。首次安装需要能访问 nodejs.org 与 npm 官方软件源。
 2. 在该 Mac 上准备匹配当前微信版本和当前账号的 `wx` 环境。
 3. 不复制其他用户的 `all_keys.json`、Keychain 主密钥或 Dashboard 数据库。
 4. 运行 `pnpm privacy:harden`、`pnpm reader:inspect` 和 `pnpm build`。
-5. 运行 `pnpm skill:install`，把同一份 Skill 安全链接到 Codex 和 Claude Code 的用户 Skill 目录。
-6. 在 Codex 调用 `$wechat-dashboard`，再到 `/setup` 验证本机读取器、飞书用户授权和账号。Claude Code 可以启动本机页面与同步，但无法提供 Terra High 时不执行语义导入。
+5. 安装脚本先在临时目录验证 Skill 安装，再把同一份 Skill 安全链接到 Codex 用户 Skill 目录。
+6. 在 Codex 调用 `$wechat-dashboard`，再到 `/setup` 验证本机读取器、飞书用户授权和账号。若当前 Codex 环境不能提供 Terra High，本机页面与同步仍可使用，语义结果不会导入。
 7. 先完成安全 bootstrap，再逐批扩展当天覆盖。
 
 不需要安装 LaunchAgent，也不需要创建 Codex Automation。微信升级、重装或切换账号后，可能需要重新做一次低频、受控的本机读取器验证。
@@ -177,7 +177,9 @@ pnpm priority:verify
 pnpm priority:verify:live
 pnpm session:verify
 pnpm security:verify
-pnpm skill:check
+pnpm feishu:verify
+pnpm skill:verify:transfer
+pnpm skill:check:codex
 pnpm reader:inspect
 ```
 
@@ -193,6 +195,8 @@ pnpm reader:inspect
 | Skill 报 `DASHBOARD_VIEWER_CLOSED` | 页面已关闭，监控按设计停止；重新调用 Skill 即可。 |
 | 没有“@ 我的信息” | 在 `/setup` 填写本人在工作群使用的昵称或别名。 |
 | `better-sqlite3` 无法加载 | 运行 `pnpm rebuild better-sqlite3`。 |
+| Skill 报 `NODE_RUNTIME_MISSING` | 回到移交包双击 `INSTALL.command`，补齐项目专用运行环境。 |
+| Skill 报 `TERRA_HIGH_UNAVAILABLE` | 当前 Codex 没有确认可用的 Terra High；本机同步和页面可继续使用，语义导入保持停止。 |
 
 ## 项目协作
 

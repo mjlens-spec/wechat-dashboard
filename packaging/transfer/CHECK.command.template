@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 PROJECT_DIR="$SCRIPT_DIR/wechat-feishu-message-analysis-dashboard"
+source "$SCRIPT_DIR/RUNTIME.zsh"
 
 function run_check() {
   print "\n— $1"
@@ -18,17 +19,23 @@ function run_optional() {
 
 [[ "$(uname -s)" == "Darwin" ]] || { print -u2 "只支持 macOS。"; exit 1; }
 [[ -f "$PROJECT_DIR/package.json" ]] || { print -u2 "找不到完整项目。"; exit 1; }
+activate_project_runtime "$PROJECT_DIR" || {
+  print -u2 "找不到兼容的项目运行环境；请先运行 INSTALL.command。"
+  exit 1
+}
 
 cd "$PROJECT_DIR"
 run_check "Node.js" node --version
 run_check "pnpm" pnpm --version
-run_optional "飞书 CLI" lark-cli --version
-run_optional "飞书用户授权" lark-cli auth status --json --verify
+run_optional "飞书 CLI" pnpm exec lark-cli --version
+run_optional "飞书用户授权" pnpm exec lark-cli auth status --json --verify
 run_optional "微信读取器" pnpm reader:inspect
 run_check "私有路径" pnpm security:verify
 run_check "会话策略" pnpm session:verify
 run_check "优先级策略" pnpm priority:verify
-run_check "Agent Skill" pnpm skill:check
+run_check "飞书截断策略" pnpm feishu:verify
+run_check "Codex Skill 隔离安装" pnpm skill:verify:transfer
+run_check "Codex Skill" pnpm skill:check:codex
 
 print "\n检查完成。此脚本没有发送消息，也没有启动、退出、重签或修改微信与飞书。"
 read -r "?按回车关闭窗口…"

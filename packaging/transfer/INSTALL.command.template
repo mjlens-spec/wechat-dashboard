@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 PROJECT_DIR="$SCRIPT_DIR/wechat-feishu-message-analysis-dashboard"
+source "$SCRIPT_DIR/RUNTIME.zsh"
 
 function fail() {
   print -u2 "\n安装停止：$1"
@@ -14,53 +15,45 @@ function fail() {
 [[ "$(uname -s)" == "Darwin" ]] || fail "只支持 macOS。"
 [[ -f "$PROJECT_DIR/package.json" ]] || fail "找不到完整项目，请重新解压整个移交包。"
 
-command -v node >/dev/null 2>&1 || fail "没有找到 Node.js。请先安装 Node.js 20 或更高版本。"
-NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
-(( NODE_MAJOR >= 20 )) || fail "Node.js 版本过低，至少需要 20；当前版本为 $(node --version)。"
-
-if ! command -v pnpm >/dev/null 2>&1; then
-  if command -v corepack >/dev/null 2>&1; then
-    print "正在通过 Corepack 准备 pnpm 11.16.0…"
-    corepack prepare pnpm@11.16.0 --activate || fail "Corepack 无法准备 pnpm。"
-  else
-    fail "没有找到 pnpm 或 Corepack。"
-  fi
-fi
-
-if ! command -v lark-cli >/dev/null 2>&1; then
-  print "\n[1/8] 安装飞书官方 lark-cli 1.0.84…"
-  npx --yes @larksuite/cli@1.0.84 install || fail "lark-cli 安装失败。"
-else
-  print "\n[1/8] 飞书 CLI 已安装：$(lark-cli --version)"
-fi
+print "\n[1/9] 准备项目专用运行环境…"
+setup_project_runtime "$PROJECT_DIR" || fail "无法准备 Node.js 与 pnpm；请检查网络后重试。"
+print "Node.js：$(node --version)"
+print "pnpm：$(pnpm --version)"
 
 cd "$PROJECT_DIR"
 
-print "\n[2/8] 安装锁定依赖…"
-pnpm install --frozen-lockfile || fail "依赖安装失败，请检查网络或 Node.js 环境。"
+print "\n[2/9] 安装锁定依赖与项目专用飞书 CLI…"
+if ! pnpm install --frozen-lockfile --registry=https://registry.npmmirror.com; then
+  print "npm 镜像不可用，改用 npm 官方源重试…"
+  pnpm install --frozen-lockfile --registry=https://registry.npmjs.org || fail "依赖安装失败，请检查网络。"
+fi
+pnpm exec lark-cli --version || fail "项目专用飞书 CLI 安装失败。"
 
-print "\n[3/8] 重建当前 Mac 的 SQLite 原生模块…"
+print "\n[3/9] 重建当前 Mac 的 SQLite 原生模块…"
 pnpm rebuild better-sqlite3 || fail "better-sqlite3 重建失败。"
 
-print "\n[4/8] 收紧本地隐私目录权限…"
+print "\n[4/9] 收紧本地隐私目录权限…"
 pnpm privacy:harden || fail "隐私目录权限检查失败。"
 
-print "\n[5/8] 检查微信读取器…"
+print "\n[5/9] 检查微信读取器…"
 pnpm reader:inspect || print "微信读取器尚未就绪；稍后按 CONNECT_WECHAT_FEISHU.md 逐机配置。"
 
-print "\n[6/8] 构建 production Dashboard…"
+print "\n[6/9] 构建 production Dashboard…"
 pnpm build || fail "Dashboard 构建失败。"
 
-print "\n[7/8] 安装 Codex 与 Claude Code Skill…"
-pnpm skill:install || fail "Agent Skill 安装失败。"
-pnpm skill:check || fail "Agent Skill 安装后检查失败。"
+print "\n[7/9] 隔离验证 Codex Skill 安装流程…"
+pnpm skill:verify:transfer || fail "Codex Skill 隔离安装验证失败。"
 
-print "\n[8/8] 启动本机临时 Dashboard…"
+print "\n[8/9] 安装 Codex Skill…"
+pnpm skill:install:codex || fail "Codex Skill 安装失败。"
+pnpm skill:check:codex || fail "Codex Skill 安装后检查失败。"
+
+print "\n[9/9] 启动本机临时 Dashboard…"
 pnpm session:start || fail "Dashboard 启动失败。"
 
 open "http://127.0.0.1:3000/setup"
 
-print "\n代码、依赖、构建和 Skill 安装已经完成。"
+print "\n代码、项目专用运行环境、构建和 Codex Skill 安装已经完成。"
 print "下一步：按照 CONNECT_WECHAT_FEISHU.md 完成这台 Mac 自己的微信读取器与飞书用户授权。"
 print "之后在 Codex 中输入：\$wechat-dashboard"
 read -r "?按回车关闭窗口…"

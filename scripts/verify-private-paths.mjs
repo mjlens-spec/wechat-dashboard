@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -9,11 +16,15 @@ import {
   securePrivateDirectory,
   securePrivateFile,
 } from '../lib/private-paths.mjs';
+import { readerCacheIsPrivate } from '../lib/reader-security.mjs';
 
 verifyDataRootSymlinkRejected();
 verifyPrivateFileSymlinkRejected();
 verifyDatabaseSidecarSymlinkRejected();
 verifyBackupStagingSymlinkRejected();
+verifyReaderCacheAccepted();
+verifyReaderCacheSymlinkRejected();
+verifyReaderCachePermissionsRejected();
 
 process.stdout.write(
   `${JSON.stringify(
@@ -25,6 +36,9 @@ process.stdout.write(
         private_file_symlink_rejected: true,
         database_sidecar_symlink_rejected: true,
         backup_staging_symlink_rejected: true,
+        reader_cache_private_path_accepted: true,
+        reader_cache_symlink_rejected: true,
+        reader_cache_permissions_rejected: true,
       },
     },
     null,
@@ -82,6 +96,40 @@ function verifyBackupStagingSymlinkRejected() {
     symlinkSync(target, stagingPath);
     assert.throws(() => createPrivateFile(stagingPath), (error) => error?.code === 'EEXIST');
   });
+}
+
+function verifyReaderCacheAccepted() {
+  withPrivateHome((home) => {
+    createReaderCache(home);
+    assert.equal(readerCacheIsPrivate(home), true);
+  });
+}
+
+function verifyReaderCacheSymlinkRejected() {
+  withPrivateHome((home) => {
+    const wxRoot = join(home, '.wx-cli');
+    mkdirSync(wxRoot, { mode: 0o700 });
+    const linkedCache = join(home, 'linked-cache');
+    mkdirSync(linkedCache, { mode: 0o700 });
+    symlinkSync(linkedCache, join(wxRoot, 'cache'));
+    writeFileSync(join(wxRoot, 'all_keys.json'), '{}\n', { mode: 0o600 });
+    assert.equal(readerCacheIsPrivate(home), false);
+  });
+}
+
+function verifyReaderCachePermissionsRejected() {
+  withPrivateHome((home) => {
+    createReaderCache(home);
+    chmodSync(join(home, '.wx-cli', 'all_keys.json'), 0o644);
+    assert.equal(readerCacheIsPrivate(home), false);
+  });
+}
+
+function createReaderCache(home) {
+  const wxRoot = join(home, '.wx-cli');
+  mkdirSync(wxRoot, { mode: 0o700 });
+  mkdirSync(join(wxRoot, 'cache'), { mode: 0o700 });
+  writeFileSync(join(wxRoot, 'all_keys.json'), '{}\n', { mode: 0o600 });
 }
 
 function withPrivateHome(callback) {

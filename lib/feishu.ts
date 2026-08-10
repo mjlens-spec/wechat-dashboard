@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
+import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 
@@ -85,7 +86,6 @@ export interface FeishuAuthStatus {
   refreshExpiresAt: string | null;
   missingScopes: string[];
   errorCode: string | null;
-  fullAuthorizationPendingApproval: boolean;
 }
 
 export interface FeishuPage<T> {
@@ -130,7 +130,6 @@ export async function feishuAuthStatus(): Promise<FeishuAuthStatus> {
       ),
       missingScopes: REQUIRED_SCOPES.filter((scope) => !scopes.includes(scope)),
       errorCode: ready ? null : 'FEISHU_AUTH_NOT_READY',
-      fullAuthorizationPendingApproval: true,
     };
   } catch (error) {
     return {
@@ -142,7 +141,6 @@ export async function feishuAuthStatus(): Promise<FeishuAuthStatus> {
       refreshExpiresAt: null,
       missingScopes: [...REQUIRED_SCOPES],
       errorCode: feishuErrorCode(error),
-      fullAuthorizationPendingApproval: true,
     };
   }
 }
@@ -264,7 +262,11 @@ class FeishuCliError extends Error {
 }
 
 function resolveLarkCli(): string {
-  for (const path of ['/opt/homebrew/bin/lark-cli', '/usr/local/bin/lark-cli']) {
+  for (const path of [
+    resolve(process.cwd(), 'node_modules', '.bin', 'lark-cli'),
+    '/opt/homebrew/bin/lark-cli',
+    '/usr/local/bin/lark-cli',
+  ]) {
     try {
       accessSync(path, constants.X_OK);
       return path;

@@ -33,7 +33,6 @@ type SetupStatus = {
       refreshExpiresAt: string | null;
       missingScopes: string[];
       errorCode: string | null;
-      fullAuthorizationPendingApproval: boolean;
     };
   };
 };
@@ -168,8 +167,8 @@ export default function SetupPage() {
             />
             <div className="setup-ledger mt-3">
               <div><span>当前身份</span><span>{status?.checks.feishu.identity === 'user' ? '本人用户' : '未就绪'}</span></div>
-              <div><span>完整业务域</span><span>等待飞书应用审核</span></div>
-              <div><span>本轮消息分析</span><span>不受审核状态影响</span></div>
+              <div><span>授权范围</span><span>飞书消息域</span></div>
+              <div><span>令牌状态</span><span>{status?.checks.feishu.ready ? '有效' : '需要检查'}</span></div>
             </div>
             <label className="mt-4 flex items-start gap-2 text-[14px]">
               <input

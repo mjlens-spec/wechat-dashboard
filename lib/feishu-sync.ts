@@ -10,6 +10,7 @@ import {
   feishuErrorCode,
   feishuMessages,
 } from './feishu';
+import { resolveFeishuSyncCompletion } from './feishu-sync-policy.mjs';
 import {
   bulkUpsertExternalMessages,
   recordConversationSync,
@@ -52,7 +53,7 @@ export async function syncFeishu(): Promise<FeishuSyncResult> {
       );
       result.conversationsSeen = chats.items.length;
       result.truncated ||= chats.hasMore;
-      setAppState('feishu_metadata_at', String(now));
+      if (!chats.hasMore) setAppState('feishu_metadata_at', String(now));
     }
 
     const lastSuccess = getAppStateNumber('feishu_last_success_at');
@@ -114,8 +115,18 @@ export async function syncFeishu(): Promise<FeishuSyncResult> {
         truncated: page.hasMore,
       });
     }
-    setAppState('feishu_last_success_at', String(now));
-    setAppState('feishu_last_error', '');
+    const completion = resolveFeishuSyncCompletion({
+      truncated: result.truncated,
+      attemptedAt: now,
+      previousSuccessAt: lastSuccess,
+    });
+    if (!completion.complete) {
+      result.errorCode = completion.errorCode ?? 'FEISHU_RESULT_TRUNCATED';
+      setAppState('feishu_last_error', result.errorCode);
+    } else {
+      setAppState('feishu_last_success_at', String(completion.lastSuccessAt));
+      setAppState('feishu_last_error', '');
+    }
     return result;
   } catch (error) {
     const errorCode = feishuErrorCode(error);

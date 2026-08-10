@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { z } from 'zod';
 import { DATA_DIR, configStatus, writeConfig } from '@/lib/config';
 import { seedDemoData } from '@/lib/demo-data';
@@ -11,6 +8,7 @@ import {
 } from '@/lib/wechat-account';
 import { wxAvailable, wxDaemonStatus, wxSessions } from '@/lib/wx';
 import { feishuAuthStatus } from '@/lib/feishu';
+import { readerCacheIsPrivate } from '@/lib/reader-security.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,17 +103,4 @@ export async function POST(req: NextRequest) {
   });
   const demo = parsed.data.demoMode ? seedDemoData() : null;
   return NextResponse.json({ ok: true, configured: true, config, demo });
-}
-
-function readerCacheIsPrivate(): boolean {
-  const paths = [
-    join(/*turbopackIgnore: true*/ homedir(), '.wx-cli'),
-    join(/*turbopackIgnore: true*/ homedir(), '.wx-cli', 'cache'),
-    join(/*turbopackIgnore: true*/ homedir(), '.wx-cli', 'all_keys.json'),
-  ];
-  try {
-    return paths.every((path) => (statSync(path).mode & 0o077) === 0);
-  } catch {
-    return false;
-  }
 }

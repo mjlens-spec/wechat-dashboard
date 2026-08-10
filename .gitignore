@@ -31,6 +31,8 @@ data/
 tsconfig.tsbuildinfo
 .cache/
 .turbo/
+.runtime/
+.pnpm-store/
 .playwright-cli/
 output/playwright/
 .release/

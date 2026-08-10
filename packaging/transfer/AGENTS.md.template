@@ -1,0 +1,26 @@
+# Codex Transfer Guide
+
+This folder is the complete macOS transfer package for “微信飞书消息分析 Dashboard” v{{VERSION}}. The application project is in `wechat-feishu-message-analysis-dashboard/`.
+
+Before acting, read these files completely:
+
+1. `README_FIRST.md`
+2. `INSTALLATION_GUIDE.md`
+3. `CONNECT_WECHAT_FEISHU.md`
+4. `TRANSFER_CHECKLIST.md`
+5. `wechat-feishu-message-analysis-dashboard/AGENTS.md`
+6. `wechat-feishu-message-analysis-dashboard/README.md`
+7. `wechat-feishu-message-analysis-dashboard/PRIVACY.md`
+8. `wechat-feishu-message-analysis-dashboard/SECURITY.md`
+
+Installation and verification rules:
+
+- Run only on macOS and keep the project folder at a stable path.
+- `INSTALL.command` can bootstrap a checksum-pinned project-local Node.js 22.23.1, pnpm 11.16.0, project-local lark-cli 1.0.84, dependencies, production build, and the Codex Skill.
+- `CHECK.command` is the read-only acceptance check. Report verified items separately from account steps still requiring the user.
+- Do not run `wx init`, restart, re-sign, log out, or modify WeChat. Do not start Frida or disable SIP.
+- Do not copy `all_keys.json`, Dashboard databases, Keychain keys, Feishu tokens, contacts, group names, or message content from another Mac.
+- Feishu must use the authenticated user identity. Never silently fall back to bot.
+- Do not create cron jobs, LaunchAgents, Codex Automations, or persistent AI services.
+- Semantic analysis accepts only `gpt-5.6-terra` with reasoning `high`. If unavailable, keep local sync and UI usable and report `TERRA_HIGH_UNAVAILABLE`.
+- After installation, verify `~/.codex/skills/wechat-dashboard` resolves to this package's project Skill, then start a new Codex task and invoke `$wechat-dashboard`.

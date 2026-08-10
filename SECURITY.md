@@ -34,6 +34,7 @@ WeChat × Feishu Dashboard 面向单用户 macOS 本机环境，保护目标是�
 - Skill 桥接器拒绝任何非 loopback URL，临时明文文件权限为 `0600`，成功导入后删除。
 - 按需服务使用随机 session ID、短租约和页面心跳；过期的页面租约或 Skill 租约不能被心跳复活，失败的本机读取至少等待 30 分钟才会由页面心跳再次尝试；没有 LaunchAgent 或常驻调度器。
 - 停止命令在发送信号前核验项目路径、supervisor PID、会话 ID 和实际命令行，拒绝终止不匹配的进程。
+- 移交安装在缺少兼容 Node.js 时从 nodejs.org 或镜像下载固定的 Node.js 22.23.1，并校验架构对应的同一固定 SHA-256；pnpm、飞书 CLI 和应用依赖均锁定版本，`.runtime/` 不进入 Git 或移交 ZIP。
 
 本机 API 没有额外登录认证。任何能以当前用户身份访问 `127.0.0.1:3000` 的本地进程，都可能读取 Dashboard 返回的数据；loopback 绑定主要阻止局域网和公网访问。写 API 还要求同源 Origin，分析结果导入额外要求未过期的一次性任务令牌。
 

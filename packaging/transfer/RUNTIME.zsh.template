@@ -1,0 +1,156 @@
+NODE_RUNTIME_VERSION="22.23.1"
+PNPM_RUNTIME_VERSION="11.16.0"
+NODE_DARWIN_ARM64_SHA256="ef28d8fab2c0e4314522d4bb1b7173270aa3937e93b92cb7de79c112ac1fa953"
+NODE_DARWIN_X64_SHA256="b8da981b8a0b1241b70249204916da76c63573ddf5814dbd2d1e41069105cb81"
+
+function node_is_compatible() {
+  command -v node >/dev/null 2>&1 || return 1
+  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 20 || (major === 20 && minor >= 9) ? 0 : 1)' >/dev/null 2>&1
+}
+
+function runtime_arch() {
+  case "$(uname -m)" in
+    arm64) print "arm64" ;;
+    x86_64) print "x64" ;;
+    *) return 1 ;;
+  esac
+}
+
+function activate_project_runtime() {
+  local project_dir="$1"
+  local arch
+  arch="$(runtime_arch)" || return 1
+  local runtime_dir="$project_dir/.runtime/node-v${NODE_RUNTIME_VERSION}-darwin-${arch}"
+  local tools_dir="$project_dir/.runtime/tools"
+
+  [[ ! -L "$project_dir/.runtime" ]] || return 1
+  [[ ! -L "$runtime_dir" ]] || return 1
+  [[ ! -L "$tools_dir" ]] || return 1
+
+  if ! node_is_compatible && [[ -x "$runtime_dir/bin/node" ]]; then
+    export PATH="$runtime_dir/bin:$PATH"
+  fi
+  node_is_compatible || return 1
+
+  if [[ -x "$tools_dir/bin/pnpm" ]]; then
+    export PATH="$tools_dir/bin:$PATH"
+  fi
+  return 0
+}
+
+function setup_project_runtime() {
+  local project_dir="$1"
+  local arch
+  arch="$(runtime_arch)" || {
+    print -u2 "不支持当前 Mac 架构：$(uname -m)"
+    return 1
+  }
+  local runtime_root="$project_dir/.runtime"
+  local runtime_name="node-v${NODE_RUNTIME_VERSION}-darwin-${arch}"
+  local runtime_dir="$runtime_root/$runtime_name"
+  local archive_part="$runtime_root/${runtime_name}.tar.gz.part"
+  local expected_sha256
+
+  if [[ "$arch" == "arm64" ]]; then
+    expected_sha256="$NODE_DARWIN_ARM64_SHA256"
+  else
+    expected_sha256="$NODE_DARWIN_X64_SHA256"
+  fi
+
+  [[ ! -L "$runtime_root" ]] || {
+    print -u2 "拒绝使用符号链接形式的 .runtime 目录。"
+    return 1
+  }
+  [[ ! -L "$runtime_dir" ]] || {
+    print -u2 "拒绝使用符号链接形式的 Node.js 运行目录。"
+    return 1
+  }
+  mkdir -p -m 700 "$runtime_root"
+  /bin/chmod 700 "$runtime_root"
+  activate_project_runtime "$project_dir" || true
+
+  if ! node_is_compatible; then
+    if [[ -e "$runtime_dir" ]]; then
+      print -u2 "现有项目运行目录不完整；请把 $runtime_dir 交给 Codex 检查。"
+      return 1
+    fi
+    [[ ! -L "$archive_part" ]] || {
+      print -u2 "拒绝覆盖符号链接形式的下载临时文件。"
+      return 1
+    }
+    /bin/rm -f "$archive_part"
+    print "未发现 Node.js 20.9 或更高版本；正在下载项目专用 Node.js ${NODE_RUNTIME_VERSION}…"
+    if ! /usr/bin/curl \
+      --proto '=https' \
+      --tlsv1.2 \
+      --fail \
+      --location \
+      --retry 2 \
+      --connect-timeout 15 \
+      --max-time 300 \
+      --output "$archive_part" \
+      "https://npmmirror.com/mirrors/node/v${NODE_RUNTIME_VERSION}/${runtime_name}.tar.gz"; then
+      /bin/rm -f "$archive_part"
+      print "Node.js 镜像不可用，改用 nodejs.org 下载同一文件，并继续使用官方固定 SHA-256 校验…"
+      /usr/bin/curl \
+        --proto '=https' \
+        --tlsv1.2 \
+        --fail \
+        --location \
+        --retry 1 \
+        --connect-timeout 15 \
+        --max-time 900 \
+        --output "$archive_part" \
+        "https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}/${runtime_name}.tar.gz" || return 1
+    fi
+
+    local actual_sha256
+    actual_sha256="$(/usr/bin/shasum -a 256 "$archive_part" | /usr/bin/awk '{print $1}')"
+    if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+      /bin/rm -f "$archive_part"
+      print -u2 "Node.js 下载文件校验失败，已删除未通过校验的临时文件。"
+      return 1
+    fi
+
+    /usr/bin/tar -xzf "$archive_part" -C "$runtime_root" || return 1
+    /bin/rm -f "$archive_part"
+    /bin/chmod -R go-rwx "$runtime_dir"
+    export PATH="$runtime_dir/bin:$PATH"
+  fi
+
+  node_is_compatible || return 1
+  command -v npm >/dev/null 2>&1 || {
+    print -u2 "当前 Node.js 环境缺少 npm。"
+    return 1
+  }
+
+  local tools_dir="$runtime_root/tools"
+  local local_pnpm="$tools_dir/bin/pnpm"
+  [[ ! -L "$tools_dir" ]] || {
+    print -u2 "拒绝使用符号链接形式的 pnpm 运行目录。"
+    return 1
+  }
+  if [[ ! -x "$local_pnpm" ]] || [[ "$($local_pnpm --version 2>/dev/null)" != "$PNPM_RUNTIME_VERSION" ]]; then
+    print "正在安装项目专用 pnpm ${PNPM_RUNTIME_VERSION}…"
+    mkdir -p -m 700 "$tools_dir"
+    if ! npm install \
+      --global \
+      --prefix "$tools_dir" \
+      "pnpm@${PNPM_RUNTIME_VERSION}" \
+      --registry=https://registry.npmmirror.com \
+      --fetch-retries=1 \
+      --fetch-timeout=60000; then
+      print "npm 镜像不可用，改用 npm 官方源安装同一固定版本…"
+      npm install \
+        --global \
+        --prefix "$tools_dir" \
+        "pnpm@${PNPM_RUNTIME_VERSION}" \
+        --registry=https://registry.npmjs.org \
+        --fetch-retries=1 \
+        --fetch-timeout=180000 || return 1
+    fi
+    /bin/chmod -R go-rwx "$tools_dir"
+  fi
+  export PATH="$tools_dir/bin:$PATH"
+  [[ "$(pnpm --version)" == "$PNPM_RUNTIME_VERSION" ]]
+}

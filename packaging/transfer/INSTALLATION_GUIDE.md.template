@@ -1,0 +1,186 @@
+# 安装与 Codex 接管指南
+
+适用版本：微信飞书消息分析 Dashboard v{{VERSION}}
+
+对应提交：`{{COMMIT}}`
+
+## 先说明“可直接移交”的边界
+
+完整 ZIP 可以把源码、项目运行环境、锁定依赖、production 构建和 Codex Skill 安装到另一台 Mac。微信读取器密钥、飞书用户令牌、Dashboard 数据库和 macOS Keychain 主密钥属于每台机器和每位用户，不能放进 ZIP，也不能从原机器复制。因此：
+
+- 代码、运行环境和 Codex Skill 可以由安装脚本一次完成；
+- 微信与飞书账号需要接收方在自己的 Mac 上分别接入；
+- ChatGPT Pro 可以提供 Codex 使用资格，但仍需由当前 Codex 环境确认是否支持项目指定的 Terra High；
+- 无法使用 Terra High 时，本机页面和只读同步可以运行，语义分析不会换用其他模型。
+
+## 一、必要环境
+
+### 必须由接收方提前具备
+
+1. 一台 macOS 电脑，当前用户可以写入项目保存目录并使用 macOS Keychain。
+2. 已安装并登录 Codex，ChatGPT Pro 订阅处于可用状态。
+3. 可以正常打开浏览器，用于飞书设备授权和本机 `127.0.0.1` 页面。
+4. 首次安装时可访问：
+   - `https://nodejs.org` 或 `https://npmmirror.com/mirrors/node/`：仅在本机没有兼容 Node.js 时下载固定运行时，两个来源使用同一官方 SHA-256 校验；
+   - `https://registry.npmmirror.com` 或 `https://registry.npmjs.org`：安装固定版本的 pnpm 与锁定依赖；
+   - 飞书开放平台与认证页面：安装后完成用户授权。
+5. 建议至少预留 2 GB 可用磁盘空间。依赖与 production 构建完成后通常需要约 1.2 GB，实际大小会随平台二进制变化。
+6. 如需读取微信：已安装并正常登录微信 Mac 版；如需读取飞书：拥有可登录的飞书账号。
+
+当前完整真实读取验收在 Apple Silicon Mac 上完成。安装脚本同时支持 `arm64` 与 `x86_64` 的 Node.js；Intel Mac 的微信真实读取路径尚未完成同等级实机验收，不能把它视为已确认无差异。
+
+### 安装脚本会自动准备
+
+- Node.js：接受现有 Node.js 20.9 或更高版本；缺失或过旧时下载项目专用 Node.js 22.23.1。
+- Node.js 完整性：按 `arm64` / `x86_64` 使用固定 SHA-256 校验，校验失败立即删除下载临时文件并停止。
+- pnpm 11.16.0：安装在项目自己的 `.runtime/tools` 中，不要求系统全局安装。
+- 飞书官方 `@larksuite/cli` 1.0.84：作为项目依赖安装，不要求系统全局安装。
+- Next.js 16.2.11、React 19.2.4、better-sqlite3 12.x 和其余锁定依赖。
+- production Dashboard 构建。
+- Codex Skill：链接到 `~/.codex/skills/wechat-dashboard`。
+
+### 仅在原生模块无法使用预编译版本时需要
+
+安装脚本会重建 `better-sqlite3`。多数匹配架构可直接使用预编译组件；如该步骤明确报出编译工具缺失，再运行：
+
+```bash
+xcode-select --install
+```
+
+完成 Apple 的安装窗口后，重新双击 `INSTALL.command`。无需为了预防而提前安装完整 Xcode。
+
+## 二、推荐安装步骤
+
+### 1. 解压并固定项目位置
+
+把整个 `wechat-feishu-message-analysis-dashboard-v{{VERSION}}` 文件夹移动到长期保留的位置，例如 `~/Documents/`。安装后不要移动或重命名其中的 `wechat-feishu-message-analysis-dashboard` 项目文件夹，因为 Codex Skill 会安全链接到这个路径。
+
+不要只复制项目子文件夹。外层的 `INSTALL.command`、`CHECK.command`、`RUNTIME.zsh` 和说明文件同样是安装的一部分。
+
+### 2. 执行一次完整安装
+
+双击 `INSTALL.command`。如果 macOS 首次阻止运行：
+
+1. 在 Finder 中右键 `INSTALL.command`；
+2. 选择“打开”；
+3. 在系统确认窗口再次选择“打开”。
+
+安装会依次执行：
+
+1. 检查 macOS 与项目完整性；
+2. 选择兼容的现有 Node.js，或下载并校验项目专用 Node.js；
+3. 安装项目专用 pnpm；
+4. 按 `pnpm-lock.yaml` 安装依赖与项目内飞书 CLI；
+5. 重建当前 Mac 架构的 SQLite 原生模块；
+6. 收紧本地隐私目录权限；
+7. 对微信读取器做匿名、只读检查；
+8. 构建 production Dashboard；
+9. 在临时目录演练一次 Codex Skill 安装与识别；
+10. 把 Skill 链接到当前用户的 Codex；
+11. 启动短租约的 `127.0.0.1` 页面并打开 `/setup`。
+
+安装脚本不会退出、重启、重签或重新初始化微信，不会发送飞书消息，也不会创建 cron、LaunchAgent 或常驻 AI 任务。
+
+### 3. 让 Codex 识别 Skill
+
+安装成功后关闭旧的 Codex 任务，新建一个任务；必要时完全退出并重新打开 Codex，让用户 Skill 清单重新扫描。然后输入：
+
+```text
+$wechat-dashboard
+```
+
+也可以在 Skill 列表中选择显示名称“微信分析启动”。可识别的 Skill 结构为：
+
+```text
+~/.codex/skills/wechat-dashboard -> <移交包固定位置>/wechat-feishu-message-analysis-dashboard/skills/wechat-dashboard
+```
+
+其中 `SKILL.md` 规定运行、隐私、30 分钟刷新和 Terra High 契约；`agents/openai.yaml` 提供 Codex 显示名称与默认调用提示；`scripts/run-bridge.zsh` 负责寻找系统或项目专用 Node.js。
+
+如果 `$wechat-dashboard` 没有出现，先双击 `CHECK.command`。只有“Codex Skill”失败时，在项目目录执行：
+
+```bash
+pnpm skill:install:codex
+pnpm skill:check:codex
+```
+
+如果目标位置已有同名真实目录或指向其他项目的链接，安装器会拒绝覆盖，以免破坏接收方已有 Skill。此时把报错交给 Codex 检查，不要手工强制删除。
+
+## 三、逐机连接账号
+
+### 微信
+
+1. 保持微信 Mac 版正常登录。
+2. 在 `/setup` 查看 `wx-cli`、读取服务、缓存权限和当前账号状态。
+3. 如果该 Mac 已有可用 `~/.wx-cli/all_keys.json`，不要运行 `wx init`。
+4. 如果新 Mac 没有读取器密钥，让 Codex 执行匿名、只读诊断并提出一次受控接入方案。不要复制其他人的 `all_keys.json`，不要自动重签微信、启动 Frida 或关闭 SIP。
+
+微信读取器与当前微信版本、当前账号和本机密钥有关。仅安装 Codex、ChatGPT Pro 或本机 HTML 服务器，不能替代这一步。
+
+### 飞书
+
+在项目目录依次运行：
+
+```bash
+pnpm exec lark-cli config init --new
+pnpm exec lark-cli auth login --domain im
+pnpm exec lark-cli auth status --json --verify
+```
+
+第一条命令会在浏览器中创建或绑定当前用户的飞书应用配置；第二条请求完整 IM 消息域权限并等待当前用户确认；第三条只读核验令牌。组织管理员要求审批时，先完成审批，再重新执行登录和状态核验。Dashboard 的每次消息读取都强制 `--as user`，不静默回退到 bot。
+
+## 四、Terra High 条件
+
+项目只接受：
+
+```text
+model: gpt-5.6-terra
+reasoning: high
+```
+
+调用 Skill 时，Codex 会优先创建一个隔离的 Terra High 执行单元，并只把私有上下文文件路径交给它。若当前客户端不支持模型覆盖，只有当前任务能够明确证明自己就是 Terra High 时才继续。否则返回 `TERRA_HIGH_UNAVAILABLE`，不使用 Sol、Luna 或其他模型替代。
+
+这项能力取决于接收方当前 Codex 客户端和账户实际暴露的模型，不应只根据 ChatGPT Pro 订阅名称推定已经可用。
+
+## 五、完整验收
+
+安装后双击 `CHECK.command`。它执行只读检查，不发送消息，也不修改微信或飞书。通过项应包括：
+
+- Node.js 版本；
+- pnpm 11.16.0；
+- 项目内 lark-cli 1.0.84；
+- 飞书用户令牌核验；
+- 微信读取器匿名状态；
+- 私有路径和符号链接防护；
+- 会话租约与优先级策略；
+- 飞书截断结果不推进成功游标；
+- Codex Skill 隔离安装与实际链接检查。
+
+微信或飞书尚未授权时，相应账号项可以显示“尚未就绪”，其余代码、构建和 Skill 项仍应通过。完成逐机接入后再次运行 `CHECK.command`。
+
+## 六、常见问题
+
+| 现象 | 处理方式 |
+| --- | --- |
+| `INSTALL.command` 无法打开 | Finder 右键“打开”；确认文件仍位于完整解压目录。 |
+| Node.js 下载失败 | 检查 nodejs.org / npmmirror 网络；脚本不会使用未通过 SHA-256 的文件。 |
+| npm 安装超时 | 保持网络稳定后重新运行安装脚本；锁文件确保版本不漂移。 |
+| `better-sqlite3` 构建失败 | 按提示运行 `xcode-select --install`，完成后重试。 |
+| `$wechat-dashboard` 未识别 | 新建 Codex 任务或重启 Codex，再运行 `CHECK.command`。 |
+| `NODE_RUNTIME_MISSING` | 回到外层移交目录重新运行 `INSTALL.command`。 |
+| `FEISHU_AUTH_NOT_READY` | 完成飞书 `config init`、`auth login --domain im` 和组织审批。 |
+| `TERRA_HIGH_UNAVAILABLE` | 本机同步与页面可继续使用；升级或调整 Codex 环境后再执行语义分析。 |
+| 微信读取器未就绪 | 保留现状，让 Codex做匿名诊断；不要直接运行 `wx init`。 |
+| 安装后移动了项目文件夹 | 移回原位置，或在新位置重新运行 Skill 安装检查。 |
+
+## 七、交给 Codex 的接管指令
+
+如果需要让接收方的 Codex 协助安装，可以把整个解压文件夹作为工作区打开，并发送：
+
+```text
+请先完整阅读 README_FIRST.md、INSTALLATION_GUIDE.md、CONNECT_WECHAT_FEISHU.md，
+然后只做匿名、只读的环境检查。确认无冲突后运行 INSTALL.command 所列流程，
+安装 Codex Skill 并执行 CHECK.command 的等价验收。不要运行 wx init，不要退出、
+重启、重签微信，不要创建常驻服务；飞书始终使用 user 身份。完成后告诉我哪些
+项目已验证、哪些账号步骤仍需我本人授权。
+```
