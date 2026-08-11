@@ -38,7 +38,7 @@
 - `SOURCE_FILES.json`：可覆盖源码的相对路径清单与必须保留的本机状态。
 - `AGENTS.md`：接收方把外层移交文件夹交给 Codex 时自动读取的接管规则。
 - `CONNECT_WECHAT_FEISHU.md`：微信与飞书逐机接入步骤。
-- `wechat-feishu-message-analysis-dashboard/移交资料/`：脱敏的微信本机读取接入与排障经验。
+- `WECHAT_READER_TROUBLESHOOTING.md`：脱敏的微信本机读取接入与排障经验。
 - `TRANSFER_CHECKLIST.md`：版本、组件、排除项和安全边界。
 - `RELEASE_MANIFEST.json`：产品版本、Git 提交与生成时间。
 - `SHA256SUMS.txt`：包内所有文件的 SHA-256 清单。

@@ -24,6 +24,11 @@ const projectFolderName = 'wechat-feishu-message-analysis-dashboard';
 const releaseDirectory = join(projectRoot, '交付包');
 const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'));
 const packageRootName = `${projectFolderName}-v${packageJson.version}`;
+const readerTroubleshootingSource = join(
+  projectRoot,
+  '移交资料',
+  '微信本机数据读取接入与排障经验_OC_0811[A].md',
+);
 const baseCommit = git(['rev-parse', 'HEAD']).trim();
 const sourceState = git(['status', '--porcelain=v1', '--untracked-files=all']).trim()
   ? 'working-tree-snapshot'
@@ -63,6 +68,11 @@ try {
       mode: name.includes('.command') ? 0o755 : 0o600,
     });
   }
+
+  copyFileSync(
+    readerTroubleshootingSource,
+    join(packageRoot, 'WECHAT_READER_TROUBLESHOOTING.md'),
+  );
 
   writeFileSync(
     join(packageRoot, 'RELEASE_MANIFEST.json'),
@@ -164,7 +174,10 @@ function allowedUntrackedSource(path) {
 }
 
 function excludedFromTransfer(path) {
-  return path === 'WeChat_Dashboard_Context_Handoff_OC_0809[A].md';
+  return (
+    path === 'WeChat_Dashboard_Context_Handoff_OC_0809[A].md' ||
+    path.startsWith('移交资料/')
+  );
 }
 
 function nextArtifactStem(version) {
@@ -220,7 +233,7 @@ function verifyArchiveContents(path) {
     `${packageRootName}/${projectFolderName}/app/api/keywords/route.ts`,
     `${packageRootName}/${projectFolderName}/app/keywords/[id]/page.tsx`,
     `${packageRootName}/${projectFolderName}/lib/update-cadence.mjs`,
-    `${packageRootName}/${projectFolderName}/移交资料/微信本机数据读取接入与排障经验_OC_0811[A].md`,
+    `${packageRootName}/WECHAT_READER_TROUBLESHOOTING.md`,
   ];
   for (const entry of required) {
     if (!normalizedEntries.has(entry.normalize('NFC'))) {
