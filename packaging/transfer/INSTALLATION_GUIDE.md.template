@@ -2,7 +2,11 @@
 
 适用版本：微信飞书消息分析 Dashboard v{{VERSION}}
 
-对应提交：`{{COMMIT}}`
+基础提交：`{{COMMIT}}`
+
+源码状态：`{{SOURCE_STATE}}`
+
+已有旧版本时，请停止本页的首次安装流程，改读 `CODEX_UPGRADE.md`。该流程允许旧项目位于任意绝对路径，并会要求 Codex 先备份再按相对路径覆盖。
 
 ## 先说明“可直接移交”的边界
 
@@ -95,7 +99,7 @@ $wechat-dashboard
 ~/.codex/skills/wechat-dashboard -> <移交包固定位置>/wechat-feishu-message-analysis-dashboard/skills/wechat-dashboard
 ```
 
-其中 `SKILL.md` 规定运行、隐私、30 分钟刷新和 Terra High 契约；`agents/openai.yaml` 提供 Codex 显示名称与默认调用提示；`scripts/run-bridge.zsh` 负责寻找系统或项目专用 Node.js。
+其中 `SKILL.md` 规定运行、隐私、10 分钟同步与分析顺序和 Terra High 契约；`agents/openai.yaml` 提供 Codex 显示名称与默认调用提示；`scripts/run-bridge.zsh` 负责寻找系统或项目专用 Node.js。
 
 如果 `$wechat-dashboard` 没有出现，先双击 `CHECK.command`。只有“Codex Skill”失败时，在项目目录执行：
 

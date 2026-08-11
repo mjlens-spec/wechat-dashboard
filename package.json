@@ -1,6 +1,6 @@
 {
   "name": "wechat-feishu-message-analysis-dashboard",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "packageManager": "pnpm@11.16.0",
   "scripts": {
@@ -9,6 +9,7 @@
     "db:backup": "node scripts/backup-cockpit-db.mjs",
     "privacy:harden": "node scripts/reader/harden-permissions.mjs",
     "priority:verify": "node scripts/verify-priority-policy.mjs",
+    "keyword:verify": "node scripts/verify-keyword-tracking.mjs",
     "priority:verify:live": "node scripts/verify-priority-workspace.mjs",
     "intelligence:verify": "node scripts/verify-intelligence.mjs",
     "feishu:verify": "node scripts/verify-feishu-sync-policy.mjs",

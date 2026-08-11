@@ -9,6 +9,7 @@ import {
 import { wxAvailable, wxDaemonStatus, wxSessions } from '@/lib/wx';
 import { feishuAuthStatus } from '@/lib/feishu';
 import { readerCacheIsPrivate } from '@/lib/reader-security.mjs';
+import { UPDATE_INTERVAL_MINUTES } from '@/lib/update-cadence.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
     privacyConfirmed: parsed.data.privacyConfirmed,
     demoMode: parsed.data.demoMode,
     defaultSyncDays: parsed.data.defaultSyncDays,
-    autoSyncMinutes: 30,
+    autoSyncMinutes: UPDATE_INTERVAL_MINUTES,
     feishuEnabled: parsed.data.feishuEnabled,
     analyzeWeChatPrivate: parsed.data.analyzeWeChatPrivate,
     analyzeFeishuPrivate: parsed.data.analyzeFeishuPrivate,

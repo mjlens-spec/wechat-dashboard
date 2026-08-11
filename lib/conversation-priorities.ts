@@ -6,13 +6,18 @@ import {
   prioritizeGroupRecords,
 } from './conversation-priority-policy.mjs';
 import type { Platform, PlatformFilter } from './conversations';
+import {
+  keywordMatchesPlatform,
+  normalizeKeywordSource,
+} from './keyword-tracking-policy.mjs';
 
 const MAX_PRIORITY_KEYWORDS = 24;
 const MAX_SCANNED_MESSAGES = 10_000;
 const MAX_MESSAGE_CORPUS_PER_GROUP = 200_000;
 const MAX_RESULTS = 80;
 
-export type PriorityKeyword = { id: string; keyword: string };
+export type KeywordSource = 'wechat' | 'feishu' | 'all';
+export type PriorityKeyword = { id: string; keyword: string; source: KeywordSource };
 
 export type PriorityGroup = {
   id: string;
@@ -88,7 +93,9 @@ export function priorityWorkspace(
     )
     .all({ since, until, platform }) as EncryptedGroupRow[];
 
-  const keywords = listPriorityKeywords();
+  const keywords = listPriorityKeywords().filter(
+    (keyword) => platform === 'all' || keywordMatchesPlatform(keyword.source, platform),
+  );
   const shouldScanMessages = Boolean(search.trim() || keywords.length > 0);
   const messageRows = shouldScanMessages
     ? (db()
@@ -204,8 +211,12 @@ export function setConversationStarred(chatroomId: string, starred: boolean): bo
   return true;
 }
 
-export function addPriorityKeyword(rawKeyword: string): PriorityKeyword {
+export function addPriorityKeyword(
+  rawKeyword: string,
+  rawSource: KeywordSource = 'all',
+): PriorityKeyword {
   const keyword = normalizePriorityKeyword(rawKeyword);
+  const source = normalizeKeywordSource(rawSource);
   if (!keyword) throw new Error('INVALID_PRIORITY_KEYWORD');
   const current = listPriorityKeywords();
   const duplicate = current.find(
@@ -215,10 +226,24 @@ export function addPriorityKeyword(rawKeyword: string): PriorityKeyword {
   if (current.length >= MAX_PRIORITY_KEYWORDS) throw new Error('PRIORITY_KEYWORD_LIMIT');
   const id = `kw_${randomBytes(14).toString('hex')}`;
   db()
-    .prepare('INSERT INTO priority_keywords (id, keyword_cipher, created_at) VALUES (?, ?, ?)')
-    .run(id, encryptSensitiveText(keyword, `priority-keyword:${id}`), Date.now());
+    .prepare(
+      'INSERT INTO priority_keywords (id, keyword_cipher, platform_scope, created_at) VALUES (?, ?, ?, ?)',
+    )
+    .run(id, encryptSensitiveText(keyword, `priority-keyword:${id}`), source, Date.now());
   secureDatabaseFiles();
-  return { id, keyword };
+  return { id, keyword, source };
+}
+
+export function updatePriorityKeywordSource(
+  id: string,
+  rawSource: KeywordSource,
+): boolean {
+  const source = normalizeKeywordSource(rawSource);
+  const result = db()
+    .prepare('UPDATE priority_keywords SET platform_scope = ? WHERE id = ?')
+    .run(source, id);
+  secureDatabaseFiles();
+  return result.changes > 0;
 }
 
 export function removePriorityKeyword(id: string): boolean {
@@ -227,16 +252,23 @@ export function removePriorityKeyword(id: string): boolean {
   return result.changes > 0;
 }
 
-function listPriorityKeywords(): PriorityKeyword[] {
+export function listPriorityKeywords(): PriorityKeyword[] {
   const rows = db()
-    .prepare('SELECT id, keyword_cipher FROM priority_keywords ORDER BY created_at ASC')
-    .all() as Array<{ id: string; keyword_cipher: string }>;
+    .prepare(
+      'SELECT id, keyword_cipher, platform_scope FROM priority_keywords ORDER BY created_at ASC',
+    )
+    .all() as Array<{
+    id: string;
+    keyword_cipher: string;
+    platform_scope: KeywordSource;
+  }>;
   const keywords: PriorityKeyword[] = [];
   for (const row of rows) {
     try {
       keywords.push({
         id: row.id,
         keyword: decryptSensitiveText(row.keyword_cipher, `priority-keyword:${row.id}`),
+        source: normalizeKeywordSource(row.platform_scope),
       });
     } catch {
       // Ignore a corrupted preference without exposing its ciphertext to the UI.

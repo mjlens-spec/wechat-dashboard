@@ -5,13 +5,20 @@ This folder is the complete macOS transfer package for “微信飞书消息分�
 Before acting, read these files completely:
 
 1. `README_FIRST.md`
-2. `INSTALLATION_GUIDE.md`
-3. `CONNECT_WECHAT_FEISHU.md`
-4. `TRANSFER_CHECKLIST.md`
-5. `wechat-feishu-message-analysis-dashboard/AGENTS.md`
-6. `wechat-feishu-message-analysis-dashboard/README.md`
-7. `wechat-feishu-message-analysis-dashboard/PRIVACY.md`
-8. `wechat-feishu-message-analysis-dashboard/SECURITY.md`
+2. `CODEX_UPGRADE.md`
+3. `INSTALLATION_GUIDE.md`
+4. `CONNECT_WECHAT_FEISHU.md`
+5. `TRANSFER_CHECKLIST.md`
+6. `SOURCE_FILES.json`
+7. `wechat-feishu-message-analysis-dashboard/AGENTS.md`
+8. `wechat-feishu-message-analysis-dashboard/README.md`
+9. `wechat-feishu-message-analysis-dashboard/PRIVACY.md`
+10. `wechat-feishu-message-analysis-dashboard/SECURITY.md`
+
+Choose exactly one route after inspection:
+
+- Existing installation: follow `CODEX_UPGRADE.md`. Discover the target from the existing Codex Skill symlink or the package name; never assume the absolute path. Back up overwritten source files, preserve machine-local state, overlay only `SOURCE_FILES.json`, rebuild, relink or verify the Skill, and run acceptance checks.
+- First installation: follow `INSTALLATION_GUIDE.md` and `INSTALL.command`.
 
 Installation and verification rules:
 
@@ -22,5 +29,6 @@ Installation and verification rules:
 - Do not copy `all_keys.json`, Dashboard databases, Keychain keys, Feishu tokens, contacts, group names, or message content from another Mac.
 - Feishu must use the authenticated user identity. Never silently fall back to bot.
 - Do not create cron jobs, LaunchAgents, Codex Automations, or persistent AI services.
+- Never copy or overwrite `.env*`, `.runtime/`, `node_modules/`, `.next/`, `.upgrade-backups/`, `~/.wechat-dashboard/`, `~/.wx-cli/`, Feishu tokens, Keychain items, databases, logs, or message exports during an upgrade.
 - Semantic analysis accepts only `gpt-5.6-terra` with reasoning `high`. If unavailable, keep local sync and UI usable and report `TERRA_HIGH_UNAVAILABLE`.
 - After installation, verify `~/.codex/skills/wechat-dashboard` resolves to this package's project Skill, then start a new Codex task and invoke `$wechat-dashboard`.

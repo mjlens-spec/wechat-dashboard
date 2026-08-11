@@ -1,6 +1,6 @@
 # 微信飞书消息分析 Dashboard
 
-这是“微信飞书消息分析 Dashboard”v{{VERSION}} 的 macOS 完整项目移交包，对应 Git 提交 `{{COMMIT}}`。
+这是“微信飞书消息分析 Dashboard”v{{VERSION}} 的 macOS 完整项目移交与升级包。基础 Git 提交为 `{{COMMIT}}`，源码状态为 `{{SOURCE_STATE}}`；最终内容以 `RELEASE_MANIFEST.json`、`SOURCE_FILES.json` 和 `SHA256SUMS.txt` 为准。
 
 包内包含完整项目源码、锁定依赖清单、Codex Skill、安装和检查脚本，以及微信与飞书首次接入说明。它不包含任何聊天正文、联系人、群名、账号目录、数据库、密钥、密码、OAuth 令牌、Keychain 内容、日志或本机缓存。
 
@@ -12,6 +12,10 @@
 4. 安装结束后，先阅读 `INSTALLATION_GUIDE.md`，再按照 `CONNECT_WECHAT_FEISHU.md` 分别检查微信读取器与飞书用户授权。
 5. 在 Codex 输入 `$wechat-dashboard`；Skill 会启动只监听本机的临时 Dashboard，并打开 `/setup`。
 
+## 已有旧版本时
+
+不要直接运行首次安装流程，也不要假设旧项目与解压包处于相同目录。把整个解压目录交给 Codex，要求它先阅读 `AGENTS.md` 和 `CODEX_UPGRADE.md`，自动定位既有项目，备份即将覆盖的源码，再按 `SOURCE_FILES.json` 的相对路径升级。升级必须保留旧机器自己的数据库、密钥、账号授权、运行时缓存和用户未提交改动。
+
 接收方不需要预先安装 Node.js、pnpm 或飞书 CLI。首次安装需要能够访问 Node.js 下载源与 npm 软件源；脚本在缺少兼容 Node.js 时下载项目专用 Node.js 22.23.1，并用固定 SHA-256 校验后再使用。默认使用镜像，镜像不可用时回退 nodejs.org，两个来源的校验值保持不变。现有 Node.js 20.9 或更高版本也可以直接使用。
 
 ## 核心边界
@@ -21,7 +25,7 @@
 - 两端消息和分析结果加密保存在本机，主密钥位于当前 Mac 的 Keychain。
 - 私信只有在对应平台设置中明确开启后，才会进入当前 Codex 任务的受限分析上下文。
 - ChatGPT Pro 可以提供 Codex 使用资格，但不等于保证当前 Codex 环境一定暴露项目指定的 `gpt-5.6-terra`。Skill 会优先创建隔离的 Terra High 执行单元；无法确认 Terra High 时只运行本机同步和页面，不导入其他模型生成的语义结果。
-- 页面打开期间约 30 分钟增量同步一次；项目不安装 Automation、cron、LaunchAgent 或常驻 AI 任务。
+- 页面打开期间每 10 分钟增量同步一次微信与飞书群聊、私信；当前 Terra 任务只在该轮同步完整成功后开始语义分析。项目不安装 Automation、cron、LaunchAgent 或常驻 AI 任务。
 
 ## 目录
 
@@ -30,8 +34,11 @@
 - `CHECK.command`：只读检查当前 Mac 的安装与授权状态。
 - `RUNTIME.zsh`：项目专用 Node.js / pnpm 自举与校验逻辑。
 - `INSTALLATION_GUIDE.md`：完整环境清单、安装步骤、Codex 识别、验收和排障。
+- `CODEX_UPGRADE.md`：由另一台 Codex 执行的跨目录安全覆盖升级说明。
+- `SOURCE_FILES.json`：可覆盖源码的相对路径清单与必须保留的本机状态。
 - `AGENTS.md`：接收方把外层移交文件夹交给 Codex 时自动读取的接管规则。
 - `CONNECT_WECHAT_FEISHU.md`：微信与飞书逐机接入步骤。
+- `wechat-feishu-message-analysis-dashboard/移交资料/`：脱敏的微信本机读取接入与排障经验。
 - `TRANSFER_CHECKLIST.md`：版本、组件、排除项和安全边界。
 - `RELEASE_MANIFEST.json`：产品版本、Git 提交与生成时间。
 - `SHA256SUMS.txt`：包内所有文件的 SHA-256 清单。

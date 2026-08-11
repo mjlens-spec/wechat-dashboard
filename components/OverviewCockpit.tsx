@@ -31,6 +31,7 @@ export type OverviewAttentionData = {
     display_model: string | null;
     display_reasoning?: string | null;
     imported_at: number | null;
+    last_imported_at?: number | null;
   } | null;
 };
 
@@ -80,8 +81,15 @@ export default function OverviewCockpit({
                 attention?.intelligence?.display_model,
                 attention?.intelligence?.display_reasoning,
               )}
-              {attention?.intelligence?.imported_at
-                ? ` ${formatTime(attention.intelligence.imported_at)} 生成`
+              {(
+                attention?.intelligence?.last_imported_at ??
+                attention?.intelligence?.imported_at
+              )
+                ? ` ${formatTime(
+                    attention?.intelligence?.last_imported_at ??
+                      attention?.intelligence?.imported_at ??
+                      0,
+                  )} 生成`
                 : ' 等待首次分析'}
               {' · '}每条结论引用本机消息证据
             </p>

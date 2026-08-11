@@ -14,8 +14,10 @@ import PriorityWorkspace, {
 import OverviewCockpit, {
   type OverviewAttentionData,
 } from '@/components/OverviewCockpit';
+import { UPDATE_INTERVAL_MS } from '@/lib/update-cadence.mjs';
+import { DASHBOARD_REFRESH_EVENT } from '@/lib/dashboard-refresh-events';
 
-const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+const AUTO_SYNC_INTERVAL_MS = UPDATE_INTERVAL_MS;
 
 type DashboardResponse = {
   ok: boolean;
@@ -215,15 +217,20 @@ export default function Page() {
 
   useEffect(() => {
     if (!setupChecked) return;
-    const refresh = window.setInterval(() => {
+    const reloadUpdatedData = () => {
       if (!syncLock.current) {
         void reload().catch(() => setStatusText('无法读取本地 Dashboard 数据库'));
       }
-    }, 60_000);
+    };
+    const refresh = window.setInterval(reloadUpdatedData, 60_000);
     const clock = window.setInterval(tickClock, 1_000);
+    window.addEventListener(DASHBOARD_REFRESH_EVENT, reloadUpdatedData);
+    window.addEventListener('focus', reloadUpdatedData);
     return () => {
       window.clearInterval(refresh);
       window.clearInterval(clock);
+      window.removeEventListener(DASHBOARD_REFRESH_EVENT, reloadUpdatedData);
+      window.removeEventListener('focus', reloadUpdatedData);
     };
   }, [reload, setupChecked]);
 
@@ -304,12 +311,6 @@ export default function Page() {
                     starred,
                   }).then(() => undefined)
                 }
-                onAddKeyword={(keyword) =>
-                  updatePriority({ action: 'add_keyword', keyword })
-                }
-                onRemoveKeyword={(id) =>
-                  updatePriority({ action: 'remove_keyword', id }).then(() => undefined)
-                }
                 saving={prioritySaving}
               />
             </div>
@@ -323,8 +324,6 @@ export default function Page() {
                 onToggleStar={(groupId, starred) =>
                   updatePriority({ action: 'set_starred', chatroom_id: groupId, starred }).then(() => undefined)
                 }
-                onAddKeyword={(keyword) => updatePriority({ action: 'add_keyword', keyword })}
-                onRemoveKeyword={(id) => updatePriority({ action: 'remove_keyword', id }).then(() => undefined)}
                 saving={prioritySaving}
               />
             </div>
@@ -450,7 +449,7 @@ function DashboardStateNotice({
       <div className="dashboard-state dashboard-state-danger">
         <WifiOff size={15} />
         <div>
-          <strong>已超过 60 分钟未同步</strong>
+          <strong>已超过 20 分钟未同步</strong>
           <span>当前数字可能不完整，请检查读取器状态或立即刷新。</span>
         </div>
         <button className="btn btn-primary" onClick={onSync}>立即刷新</button>

@@ -4,7 +4,7 @@ import { DATA_DIR, secureDataDirectory } from './config';
 import { createPrivateFile, securePrivateFile } from './private-paths.mjs';
 
 export const DB_PATH = join(/*turbopackIgnore: true*/ DATA_DIR, 'dashboard.db');
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 let database: Database.Database | null = null;
 
@@ -84,6 +84,11 @@ function migratePlatformSchema(target: Database.Database) {
     'attention_alerts',
     'reasoning_effort',
     "TEXT NOT NULL DEFAULT 'unknown'",
+  );
+  addColumn(
+    'priority_keywords',
+    'platform_scope',
+    "TEXT NOT NULL DEFAULT 'all' CHECK (platform_scope IN ('wechat', 'feishu', 'all'))",
   );
 }
 
@@ -187,6 +192,8 @@ function createCurrentSchema(target: Database.Database) {
     CREATE TABLE IF NOT EXISTS priority_keywords (
       id TEXT PRIMARY KEY,
       keyword_cipher TEXT NOT NULL,
+      platform_scope TEXT NOT NULL DEFAULT 'all'
+        CHECK (platform_scope IN ('wechat', 'feishu', 'all')),
       created_at INTEGER NOT NULL
     );
 

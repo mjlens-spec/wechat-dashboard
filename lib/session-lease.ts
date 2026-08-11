@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { DATA_DIR, secureDataDirectory } from './config';
 import { securePrivateFile } from './private-paths.mjs';
-import { isActiveManagedLease } from './session-lease-policy.mjs';
+import { heartbeatManagedLease } from './session-lease-policy.mjs';
 
 const VIEWER_LEASE_MS = 3 * 60 * 1000;
 const leasePath = join(/*turbopackIgnore: true*/ DATA_DIR, 'session-lease.json');
@@ -37,15 +37,18 @@ export function heartbeatViewerSession(now = Date.now()) {
   const projectRoot = resolve(
     /*turbopackIgnore: true*/ process.env.WECHAT_DASHBOARD_PROJECT_ROOT || process.cwd(),
   );
-  if (!lease || !state || !isActiveManagedLease(lease, state, projectRoot, now)) {
+  if (!lease || !state) {
     return { managed: false as const, expires_at: null };
   }
 
-  const updated: SessionLease = {
-    ...lease,
-    expires_at: Math.min(lease.skill_expires_at, now + VIEWER_LEASE_MS),
-    last_viewer_heartbeat_at: now,
-  };
+  const updated = heartbeatManagedLease(
+    lease,
+    state,
+    projectRoot,
+    now,
+    VIEWER_LEASE_MS,
+  ) as SessionLease | null;
+  if (!updated) return { managed: false as const, expires_at: null };
   writePrivateJsonAtomic(leasePath, updated);
   return { managed: true as const, expires_at: updated.expires_at };
 }

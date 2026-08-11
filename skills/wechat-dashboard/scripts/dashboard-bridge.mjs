@@ -19,6 +19,7 @@ import {
   securePrivateDirectory,
   securePrivateFile,
 } from '../../../lib/private-paths.mjs';
+import { completedSyncAllowsSemanticAnalysis } from '../../../lib/update-cadence.mjs';
 
 class BridgeFailure extends Error {
   constructor(code, message, nextActions) {
@@ -51,7 +52,11 @@ try {
       sessionMinutes(args['session-minutes']),
       args['require-viewer'] === 'true',
     );
-    await prepare(args.mode ?? 'scheduled', service);
+    await prepare(
+      args.mode ?? 'scheduled',
+      service,
+      args['sync-policy'] ?? 'force',
+    );
   } else if (command === 'import') {
     await importResult(args.context, args.result);
   } else if (command === 'start' || command === 'ensure') {
@@ -97,20 +102,34 @@ try {
   }
 }
 
-async function prepare(mode, service) {
+async function prepare(mode, service, syncPolicy) {
   if (!['scheduled', 'summaries', 'alerts', 'opportunities'].includes(mode)) {
     fail('INVALID_MODE', `Unsupported analysis mode: ${mode}`, [
       'Use scheduled, summaries, alerts, or opportunities.',
     ]);
   }
+  if (!['force', 'due'].includes(syncPolicy)) {
+    fail('INVALID_SYNC_POLICY', `Unsupported sync policy: ${syncPolicy}`, [
+      'Use force for an immediate cycle or due for active monitoring.',
+    ]);
+  }
 
   const warnings = [];
+  let sync;
   try {
-    const sync = await syncLocalMessages();
-    if (sync?.status === 'partial') warnings.push('最近一次双端增量同步只完成了一部分。');
+    sync = await syncLocalMessages(syncPolicy);
   } catch (error) {
-    if (error instanceof BridgeFailure && error.code === 'DASHBOARD_UNREACHABLE') throw error;
-    warnings.push('本次增量同步失败，分析将使用最近一次可用的本地快照。');
+    if (error instanceof BridgeFailure) throw error;
+    fail('SYNC_FAILED', '本次双端消息更新失败，已跳过 Terra 语义分析。', [
+      '保持 Dashboard 页面打开，下一次 10 分钟周期会自动重试。',
+    ]);
+  }
+  if (!completedSyncAllowsSemanticAnalysis(sync?.status)) {
+    fail(
+      'SYNC_INCOMPLETE',
+      '微信与飞书消息尚未完整更新，已跳过本轮 Terra 语义分析。',
+      ['保持页面打开，下一次 10 分钟周期会自动重试。'],
+    );
   }
 
   const exported = await requestJson('/api/intelligence/export', {
@@ -587,21 +606,34 @@ function delay(milliseconds) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 }
 
-async function syncLocalMessages() {
+async function syncLocalMessages(syncPolicy = 'force') {
   const started = await requestJson('/api/sync', {
     method: 'POST',
-    body: { mode: 'latest' },
+    body: { mode: 'latest', force: syncPolicy !== 'due' },
   });
-  if (!started.ok || !started.run_id) {
+  if (started.schedule_status === 'not_due') {
+    const current = await requestJson('/api/sync');
+    return current.latest_run ?? { status: 'failed' };
+  }
+  let runId = started.run_id;
+  if (!runId && started.schedule_status === 'running') {
+    const current = await requestJson('/api/sync');
+    runId = current.latest_run?.id ?? null;
+  }
+  if (!started.ok || !runId) {
     throw new BridgeFailure('SYNC_START_FAILED', started.error ?? 'Local sync could not start.', []);
   }
   const deadline = Date.now() + 100_000;
   while (Date.now() < deadline) {
-    const state = await requestJson(`/api/sync?run_id=${encodeURIComponent(started.run_id)}`);
+    const state = await requestJson(`/api/sync?run_id=${encodeURIComponent(runId)}`);
     if (state.run && state.run.status !== 'running') return state.run;
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_500));
   }
-  return { status: 'running' };
+  throw new BridgeFailure(
+    'SYNC_TIMEOUT',
+    '双端消息更新尚未在安全等待时间内完成，已跳过 Terra 语义分析。',
+    ['保持页面打开，下一次 10 分钟周期会自动重试。'],
+  );
 }
 
 async function requestJson(path, options = {}) {

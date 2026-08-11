@@ -13,6 +13,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
+import { DASHBOARD_REFRESH_EVENT } from '@/lib/dashboard-refresh-events';
 
 type SummaryItem = {
   day: string;
@@ -47,6 +48,7 @@ type SummaryResponse = {
     display_model: string | null;
     display_reasoning?: string | null;
     imported_at: number | null;
+    last_imported_at?: number | null;
   } | null;
 };
 
@@ -73,9 +75,14 @@ export default function SummariesPage() {
   useEffect(() => {
     const initial = window.setTimeout(() => void load(), 0);
     const refresh = window.setInterval(load, 60_000);
+    const reloadUpdatedData = () => void load();
+    window.addEventListener(DASHBOARD_REFRESH_EVENT, reloadUpdatedData);
+    window.addEventListener('focus', reloadUpdatedData);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(refresh);
+      window.removeEventListener(DASHBOARD_REFRESH_EVENT, reloadUpdatedData);
+      window.removeEventListener('focus', reloadUpdatedData);
     };
   }, [load]);
 
@@ -88,10 +95,10 @@ export default function SummariesPage() {
             <div className="flex items-start gap-3">
               <FileText size={18} className="mt-1 text-[var(--accent)]" />
               <div>
-                <div className="report-kicker">30 Min · Agent Intelligence</div>
+                <div className="report-kicker">10 Min · Agent Intelligence</div>
                 <h1>会话汇总</h1>
                 <p>
-                  微信与飞书分区展示；每个群聊或私信独立汇总，每 30 分钟由 Terra High 更新。
+                  微信与飞书分区展示；每个群聊或私信独立汇总，每 10 分钟由当前 Terra High 任务更新。
                 </p>
               </div>
             </div>
