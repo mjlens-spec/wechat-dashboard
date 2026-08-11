@@ -1,7 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Clock3, Database, MessageSquareText, ShieldCheck, Wrench } from 'lucide-react';
+import {
+  CheckCircle2,
+  Clock3,
+  Database,
+  MessageSquareText,
+  Plus,
+  ShieldCheck,
+  Tags,
+  Trash2,
+  Wrench,
+} from 'lucide-react';
+
+type KeywordSource = 'wechat' | 'feishu' | 'all';
+type KeywordSetting = { id: string; keyword: string; source: KeywordSource };
 
 type SetupStatus = {
   ok: boolean;
@@ -46,13 +59,23 @@ export default function SetupPage() {
   const [feishuEnabled, setFeishuEnabled] = useState(true);
   const [analyzeWeChatPrivate, setAnalyzeWeChatPrivate] = useState(false);
   const [analyzeFeishuPrivate, setAnalyzeFeishuPrivate] = useState(false);
+  const [keywords, setKeywords] = useState<KeywordSetting[]>([]);
+  const [keywordDraft, setKeywordDraft] = useState('');
+  const [keywordSource, setKeywordSource] = useState<KeywordSource>('all');
+  const [keywordBusy, setKeywordBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
-      const response = await fetch('/api/setup', { cache: 'no-store' });
-      const data = (await response.json()) as SetupStatus;
+      const [response, keywordResponse] = await Promise.all([
+        fetch('/api/setup', { cache: 'no-store' }),
+        fetch('/api/priorities', { cache: 'no-store' }),
+      ]);
+      const [data, keywordData] = await Promise.all([
+        response.json() as Promise<SetupStatus>,
+        keywordResponse.json() as Promise<{ keywords?: KeywordSetting[] }>,
+      ]);
       setStatus(data);
       setDemoMode(data.config.demoMode);
       setPrivacyConfirmed(data.config.privacyConfirmed);
@@ -61,8 +84,45 @@ export default function SetupPage() {
       setFeishuEnabled(data.config.feishuEnabled ?? true);
       setAnalyzeWeChatPrivate(data.config.analyzeWeChatPrivate ?? false);
       setAnalyzeFeishuPrivate(data.config.analyzeFeishuPrivate ?? false);
+      setKeywords(keywordData.keywords ?? []);
     })();
   }, []);
+
+  async function updateKeywords(payload: Record<string, unknown>) {
+    setKeywordBusy(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/priorities', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        keywords?: KeywordSetting[];
+      };
+      if (!response.ok || !data.ok) throw new Error(data.error ?? '关键词保存失败');
+      setKeywords(data.keywords ?? []);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '关键词保存失败');
+      return false;
+    } finally {
+      setKeywordBusy(false);
+    }
+  }
+
+  async function addKeyword() {
+    const keyword = keywordDraft.trim();
+    if (!keyword || keywordBusy) return;
+    const saved = await updateKeywords({
+      action: 'add_keyword',
+      keyword,
+      source: keywordSource,
+    });
+    if (saved) setKeywordDraft('');
+  }
 
   async function submit() {
     setBusy(true);
@@ -101,7 +161,7 @@ export default function SetupPage() {
         <div className="flex items-center gap-2"><span className="brand-mark" /><div className="report-kicker">Dual Chat Dashboard Setup</div></div>
         <h1>配置微信与飞书会话分析</h1>
         <p>
-          微信从这台 Mac 只读同步，飞书通过一次用户认证读取。两端数据均加密保存在本机；页面打开期间每 30 分钟刷新一次。
+          微信从这台 Mac 只读同步，飞书通过一次用户认证读取。两端数据均加密保存在本机；页面打开期间每 10 分钟刷新一次。
         </p>
         </header>
 
@@ -184,7 +244,7 @@ export default function SetupPage() {
           <section className="setup-section">
             <SectionTitle icon={<Clock3 size={15} />} title="同步范围" />
             <p className="mt-3 text-[13px] leading-relaxed text-[var(--text-3)]">
-              首次只导入会话元数据，再读取最近 2 小时的少量活跃会话；当天消息按批次继续补齐。之后页面打开时每 30 分钟只读取新增消息，每小时做一次时间戳对账。
+              首次只导入会话元数据，再读取最近 2 小时的少量活跃会话；当天消息按批次继续补齐。之后页面打开时每 10 分钟读取群聊和私信新增消息，每小时做一次时间戳对账。
             </p>
             <div className="setup-ledger">
               <div><span>最近 2 小时</span><span>快速同步</span></div>
@@ -198,7 +258,8 @@ export default function SetupPage() {
             <div className="setup-ledger mt-3">
               <div><span>分析模型</span><span>Terra High</span></div>
               <div><span>群聊</span><span>微信 + 飞书</span></div>
-              <div><span>更新频率</span><span>30 分钟</span></div>
+              <div><span>双端更新</span><span>每 10 分钟</span></div>
+              <div><span>语义顺序</span><span>同步完成后运行 Terra</span></div>
             </div>
             <label className="mt-4 flex items-start gap-2 text-[14px]">
               <input
@@ -220,6 +281,85 @@ export default function SetupPage() {
             </label>
             <p className="mt-3 text-[12px] leading-relaxed text-[var(--text-3)]">
               私信只在你明确开启后进入当前 Codex 任务的受限上下文；Dashboard 本身不调用外部模型。
+            </p>
+          </section>
+
+          <section className="setup-section setup-keyword-section" id="keyword-settings">
+            <SectionTitle icon={<Tags size={15} />} title="自定义关键词标签" />
+            <p className="mt-3 text-[13px] leading-relaxed text-[var(--text-3)]">
+              设置客户名、项目名或短词。保存后会出现在左侧边栏，并按所选来源聚合相关会话内容。
+            </p>
+            <div className="keyword-setting-form">
+              <input
+                className="setup-input"
+                value={keywordDraft}
+                onChange={(event) => setKeywordDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void addKeyword();
+                  }
+                }}
+                placeholder="例如：小 n、客户名、项目名"
+                maxLength={64}
+                autoComplete="off"
+              />
+              <select
+                className="setup-select"
+                value={keywordSource}
+                onChange={(event) => setKeywordSource(event.target.value as KeywordSource)}
+                aria-label="关键词数据来源"
+              >
+                <option value="all">微信 + 飞书</option>
+                <option value="wechat">仅微信</option>
+                <option value="feishu">仅飞书</option>
+              </select>
+              <button
+                className="btn btn-primary"
+                disabled={!keywordDraft.trim() || keywordBusy}
+                onClick={() => void addKeyword()}
+              >
+                <Plus size={14} />
+                添加标签
+              </button>
+            </div>
+
+            <div className="keyword-setting-list">
+              {keywords.length ? keywords.map((keyword) => (
+                <div className="keyword-setting-row" key={keyword.id}>
+                  <span className="keyword-setting-name">{keyword.keyword}</span>
+                  <select
+                    className="setup-select compact-select"
+                    value={keyword.source}
+                    disabled={keywordBusy}
+                    onChange={(event) => {
+                      void updateKeywords({
+                        action: 'update_keyword_source',
+                        id: keyword.id,
+                        source: event.target.value as KeywordSource,
+                      });
+                    }}
+                    aria-label={`${keyword.keyword} 的数据来源`}
+                  >
+                    <option value="all">微信 + 飞书</option>
+                    <option value="wechat">仅微信</option>
+                    <option value="feishu">仅飞书</option>
+                  </select>
+                  <button
+                    className="icon-button"
+                    disabled={keywordBusy}
+                    onClick={() => void updateKeywords({ action: 'remove_keyword', id: keyword.id })}
+                    aria-label={`删除关键词 ${keyword.keyword}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              )) : (
+                <div className="keyword-setting-empty">尚未设置关键词标签。</div>
+              )}
+            </div>
+            <p className="mt-3 text-[12px] leading-relaxed text-[var(--text-3)]">
+              关键词会加密保存在本机；消息匹配和内容聚合只在 127.0.0.1 页面内完成。
             </p>
           </section>
 

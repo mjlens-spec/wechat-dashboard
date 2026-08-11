@@ -36,8 +36,9 @@ import {
   wxSessions,
 } from './wx';
 import type { WxMessage, WxNewMessage, WxSession } from './wx-types';
+import { UPDATE_INTERVAL_MS } from './update-cadence.mjs';
 
-export const AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+export const AUTO_SYNC_INTERVAL_MS = UPDATE_INTERVAL_MS;
 export const RECONCILE_INTERVAL_MS = 60 * 60 * 1000;
 
 const RUN_TIME_BUDGET_MS = 90_000;
@@ -100,7 +101,10 @@ export function startViewerScheduledSync(now = Date.now()) {
     return { status: 'skipped' as const, reason: 'not_configured' as const };
   }
   if (syncInProgress()) {
-    return { status: 'running' as const };
+    return {
+      status: 'running' as const,
+      run_id: getLatestSyncRun()?.id ?? null,
+    };
   }
 
   const latestSuccess = getLatestSuccessfulSyncRun();

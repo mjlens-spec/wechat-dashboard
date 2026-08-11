@@ -4,7 +4,8 @@
 
 - 产品：微信飞书消息分析 Dashboard
 - Release：v{{VERSION}}
-- Git 提交：`{{COMMIT}}`
+- 基础 Git 提交：`{{COMMIT}}`
+- 源码状态：`{{SOURCE_STATE}}`
 - 目标系统：macOS
 - 前端与本地服务：Next.js 16.2.11、React 19.2.4、TypeScript
 - 数据库：SQLite / better-sqlite3 12.x
@@ -17,7 +18,8 @@
 
 - Dashboard 全部受版本控制的源码和双端页面；
 - 微信、飞书群聊和私信的只读同步；
-- 30 分钟页面增量刷新与按需会话租约；
+- 10 分钟双端群聊、私信增量刷新与按需会话租约；
+- 带微信、飞书或双端来源范围的自定义关键词标签与独立汇总页；
 - 双端逐会话汇总、重点关注提示和潜在商机；
 - Terra High 强制契约、evidence 归属验证和加密导入；
 - `skills/wechat-dashboard` Codex Skill 与隔离安装验收；
@@ -33,6 +35,7 @@
 - `~/.wechat-dashboard/` 与 `~/.wx-cli/` 的全部内容；
 - 飞书 OAuth 令牌、微信密钥、联系人、群名、私信名和聊天正文；
 - 临时分析 context / result 文件、UI mockup 原包和历史 ZIP。
+- 旧机器的未提交代码、依赖目录、运行时缓存和升级备份。
 
 ## 安全边界
 

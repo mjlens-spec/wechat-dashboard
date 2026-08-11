@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
+import { DASHBOARD_REFRESH_EVENT } from '@/lib/dashboard-refresh-events';
 
 type AttentionStatus = 'open' | 'handled' | 'dismissed';
 type AttentionItem = {
@@ -50,6 +51,7 @@ type AttentionResponse = {
     display_model: string | null;
     display_reasoning?: string | null;
     imported_at: number | null;
+    last_imported_at?: number | null;
   } | null;
 };
 
@@ -86,9 +88,14 @@ export default function AttentionPage() {
   useEffect(() => {
     const initial = window.setTimeout(() => void load(), 0);
     const refresh = window.setInterval(load, 60_000);
+    const reloadUpdatedData = () => void load();
+    window.addEventListener(DASHBOARD_REFRESH_EVENT, reloadUpdatedData);
+    window.addEventListener('focus', reloadUpdatedData);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(refresh);
+      window.removeEventListener(DASHBOARD_REFRESH_EVENT, reloadUpdatedData);
+      window.removeEventListener('focus', reloadUpdatedData);
     };
   }, [load]);
 
@@ -119,7 +126,7 @@ export default function AttentionPage() {
             <div className="flex items-start gap-3">
               <BellRing size={18} className="mt-1 text-[var(--accent)]" />
               <div>
-                <div className="report-kicker">30 Min · Agent Intelligence</div>
+                <div className="report-kicker">10 Min · Agent Intelligence</div>
                 <h1>重点关注提示</h1>
                 <p>
                   左侧先看微信，右侧查看飞书；群聊与已授权私信使用同一套证据标准。
@@ -174,7 +181,7 @@ export default function AttentionPage() {
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-3)]">
               <Clock3 size={12} />
-              Skill 运行且页面打开时每 30 分钟检查一次 · 结论必须引用本机消息证据
+              当前 Terra Skill 任务运行且页面打开时每 10 分钟检查一次 · 结论必须引用本机消息证据
             </div>
           </div>
 

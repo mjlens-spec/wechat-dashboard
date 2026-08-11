@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { securePrivateDirectory, securePrivateFile } from './private-paths.mjs';
+import { UPDATE_INTERVAL_MINUTES } from './update-cadence.mjs';
 
 export const DATA_DIR = join(/*turbopackIgnore: true*/ homedir(), '.wechat-dashboard');
 
@@ -43,7 +44,7 @@ const DEFAULTS: Config = {
   setupCompleted: false,
   demoMode: process.env.WECHAT_DASHBOARD_DEMO === '1',
   defaultSyncDays: 7,
-  autoSyncMinutes: 30,
+  autoSyncMinutes: UPDATE_INTERVAL_MINUTES,
   accountDirectory: null,
   feishuEnabled: true,
   analyzeWeChatPrivate: false,
@@ -59,9 +60,16 @@ export function readConfig(): Config {
   try {
     const raw = readFileSync(CONFIG_PATH, 'utf-8');
     const parsed = JSON.parse(raw) as Partial<Config>;
-    const merged = { ...DEFAULTS, ...parsed, autoSyncMinutes: 30 };
+    const merged = {
+      ...DEFAULTS,
+      ...parsed,
+      autoSyncMinutes: UPDATE_INTERVAL_MINUTES,
+    };
     if (envNames().length > 0) merged.myNicknames = envNames();
     if (process.env.WECHAT_DASHBOARD_DEMO === '1') merged.demoMode = true;
+    if (parsed.autoSyncMinutes !== UPDATE_INTERVAL_MINUTES) {
+      writePrivateConfig(merged);
+    }
     return merged;
   } catch {
     return DEFAULTS;

@@ -1,6 +1,7 @@
 import { upsertConversations } from './conversations';
 import { writeConfig } from './config';
 import { bulkInsertMessages, recordConversationSync } from './messages-store';
+import { UPDATE_INTERVAL_MINUTES } from './update-cadence.mjs';
 import type { WxMessage, WxSession } from './wx-types';
 
 const CONVERSATIONS = [
@@ -73,7 +74,7 @@ export function seedDemoData() {
     accountDirectory: null,
     myNicknames: ['你的微信名'],
     defaultSyncDays: 7,
-    autoSyncMinutes: 30,
+    autoSyncMinutes: UPDATE_INTERVAL_MINUTES,
   });
 
   return {

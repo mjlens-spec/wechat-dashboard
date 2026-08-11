@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { KeyRound, Plus, Search, Star, X } from 'lucide-react';
+import Link from 'next/link';
+import { Search, Settings2, Star, X } from 'lucide-react';
 
-export type PriorityKeyword = { id: string; keyword: string };
+export type PriorityKeyword = {
+  id: string;
+  keyword: string;
+  source: 'wechat' | 'feishu' | 'all';
+};
 
 export type PriorityGroup = {
   id: string;
@@ -41,8 +45,6 @@ export default function PriorityWorkspace({
   searchValue,
   onSearchChange,
   onToggleStar,
-  onAddKeyword,
-  onRemoveKeyword,
   saving,
 }: {
   data?: PriorityWorkspaceData;
@@ -50,19 +52,8 @@ export default function PriorityWorkspace({
   searchValue: string;
   onSearchChange: (value: string) => void;
   onToggleStar: (groupId: string, starred: boolean) => Promise<void>;
-  onAddKeyword: (keyword: string) => Promise<boolean>;
-  onRemoveKeyword: (keywordId: string) => Promise<void>;
   saving: boolean;
 }) {
-  const [keywordDraft, setKeywordDraft] = useState('');
-
-  async function submitKeyword(event: React.FormEvent) {
-    event.preventDefault();
-    const keyword = keywordDraft.trim();
-    if (!keyword || saving) return;
-    if (await onAddKeyword(keyword)) setKeywordDraft('');
-  }
-
   return (
     <section className="priority-workspace">
       <div className="priority-header">
@@ -104,25 +95,10 @@ export default function PriorityWorkspace({
             )}
           </label>
 
-          <form className="search-field flex min-w-0 items-center gap-2" onSubmit={submitKeyword}>
-            <KeyRound size={16} className="shrink-0 text-[var(--secondary)]" />
-            <input
-              value={keywordDraft}
-              onChange={(event) => setKeywordDraft(event.target.value)}
-              placeholder="增加优先关键词，如客户名、项目名"
-              className="min-w-0 flex-1 bg-transparent text-[14px] outline-none"
-              maxLength={64}
-              aria-label="增加优先关键词"
-            />
-            <button
-              type="submit"
-              className="icon-button icon-button-primary"
-              disabled={!keywordDraft.trim() || saving}
-              aria-label="增加优先关键词"
-            >
-              <Plus size={14} />
-            </button>
-          </form>
+          <Link className="search-field keyword-manage-link" href="/setup#keyword-settings">
+            <Settings2 size={16} className="shrink-0 text-[var(--secondary)]" />
+            <span>在本机设置中管理关键词、短词和数据来源</span>
+          </Link>
         </div>
 
         <div className="priority-keywords">
@@ -133,19 +109,12 @@ export default function PriorityWorkspace({
             data.keywords.map((keyword) => (
               <span key={keyword.id} className="priority-keyword">
                 {keyword.keyword}
-                <button
-                  type="button"
-                  onClick={() => void onRemoveKeyword(keyword.id)}
-                  disabled={saving}
-                  aria-label={`删除关键词 ${keyword.keyword}`}
-                >
-                  <X size={11} />
-                </button>
+                <small>{keyword.source === 'all' ? '双端' : keyword.source === 'wechat' ? '微信' : '飞书'}</small>
               </span>
             ))
           ) : (
             <span className="text-[12px] text-[var(--text-3)]">
-              尚未设置。添加后，命中群名或当前区间消息的群聊会自动前置。
+              尚未设置。可在本机设置中添加，命中群名或当前区间消息的群聊会自动前置。
             </span>
           )}
         </div>

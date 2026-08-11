@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { UPDATE_INTERVAL_MS } from './update-cadence.mjs';
 import { readConfig } from './config';
 import { decryptSensitiveText, encryptSensitiveText } from './crypto-store';
 import { db, secureDatabaseFiles } from './db';
@@ -9,7 +10,7 @@ import {
   type SignalName,
 } from './intelligence-rules';
 
-export const SUMMARY_INTERVAL_MS = 30 * 60 * 1000;
+export const SUMMARY_INTERVAL_MS = UPDATE_INTERVAL_MS;
 export const ANALYSIS_JOB_TTL_MS = 30 * 60 * 1000;
 
 const MAX_GROUPS = 80;
@@ -164,7 +165,7 @@ export function createAnalysisExport(
     return {
       status: 'no_work' as const,
       summary: '今天尚无可供分析的本地群聊消息。',
-      next_actions: ['等待下一次 30 分钟增量同步'],
+      next_actions: ['等待下一次 10 分钟双端增量同步'],
       artifacts: [],
       context: null,
     };

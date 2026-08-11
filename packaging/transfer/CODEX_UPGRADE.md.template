@@ -1,0 +1,87 @@
+# 交给另一台 Codex 的覆盖升级说明
+
+适用版本：微信飞书消息分析 Dashboard v{{VERSION}}
+
+基础提交：`{{COMMIT}}`
+
+源码状态：`{{SOURCE_STATE}}`
+
+你的任务是把本包中的项目源码升级到这台 Mac 已存在的同一项目，同时保留这台 Mac 自己的账号、数据库、密钥、依赖缓存和用户改动。目标项目的绝对路径不固定，必须先发现再操作。
+
+## 一、识别这是升级还是首次安装
+
+先做只读检查：
+
+1. 查看 `~/.codex/skills/wechat-dashboard` 是否存在。
+2. 若它是符号链接，解析真实目标；目标应落在某个项目的 `skills/wechat-dashboard`，其上两级目录就是候选项目根目录。
+3. 若没有可用链接，只在用户当前工作区或用户明确指定的目录内查找 `package.json`；候选项目的 `name` 必须等于 `wechat-feishu-message-analysis-dashboard`。
+4. 只有一个候选且 `skills/wechat-dashboard/SKILL.md` 存在时，才能自动进入升级流程。
+5. 没有候选时按首次安装处理；存在多个候选、真实目录形式的同名 Skill、或链接指向其他项目时，停止并把候选路径与冲突交给用户选择。
+
+不得通过扫描整台磁盘来猜目标，不得把解压目录本身误当作旧项目。
+
+## 二、升级前保护
+
+1. 完整阅读包内 `SOURCE_FILES.json`、目标项目的 `AGENTS.md`、`README.md`、`PRIVACY.md` 和 `SECURITY.md`。
+2. 读取目标项目的 Git 状态。无关改动必须保留；与 `SOURCE_FILES.json` 同路径的未提交改动属于冲突，先逐项比较并告知用户，不得静默覆盖。
+3. 在目标项目内创建 `.upgrade-backups/<UTC 时间>/`，只备份本次将被覆盖且原本存在的源码文件，并写入原文件 SHA-256 清单。不要把数据库、密钥或聊天内容放进备份。
+4. 校验包内 `SHA256SUMS.txt`。任一文件不匹配时停止升级。
+
+始终保留且不得从包内复制或覆盖：
+
+- `.env*`、`.runtime/`、`node_modules/`、`.next/`、`.upgrade-backups/`；
+- `~/.wechat-dashboard/`、`~/.wx-cli/` 与 macOS Keychain；
+- 飞书 OAuth 令牌、微信数据库密钥、Dashboard 数据库、WAL / SHM、日志和消息导出；
+- 目标机器上与本次源码路径无关的用户文件和 Git 改动。
+
+## 三、按相对路径覆盖
+
+以解压包中的 `wechat-feishu-message-analysis-dashboard/` 为来源，以刚才确认的旧项目根目录为目标：
+
+1. 只处理 `SOURCE_FILES.json` 中 `files` 列出的相对路径。
+2. 每个来源必须是普通文件；目标相对路径不得逃逸项目根目录。
+3. 目标父目录若是符号链接或非常规文件，停止并报告。
+4. 先把来源复制到目标同目录的临时文件，校验 SHA-256 后再原子替换。
+5. 本版本不要求删除清单外文件；不要为了“保持一致”清空目标目录。
+
+升级后的关键能力应包括：
+
+- 本机设置中可以创建关键词或短词，并选择微信、飞书或双端；
+- 左侧边栏生成关键词标签和独立汇总页；
+- 页面打开期间每 10 分钟同步两端群聊与私信；
+- 只有同步完整成功后，当前仍活动的 Terra High Codex 任务才开始语义分析；
+- 页面心跳持续续期，所有页面关闭后临时服务约 3 分钟内退出。
+
+## 四、重建与 Skill 覆盖
+
+在目标项目根目录执行：
+
+```bash
+pnpm install --frozen-lockfile
+pnpm rebuild better-sqlite3
+pnpm build
+pnpm skill:verify:transfer
+pnpm skill:install:codex
+pnpm skill:check:codex
+```
+
+如果系统 pnpm 不可用，可从解压包外层读取并使用 `RUNTIME.zsh` 准备项目专用运行时。若现有 Skill 链接已指向目标项目，安装器会原地核验；若它指向其他项目或是同名真实目录，安装器会拒绝覆盖，此时停止并报告，不要删除或强制替换。
+
+## 五、验收与回报
+
+依次运行：
+
+```bash
+pnpm keyword:verify
+pnpm priority:verify
+pnpm session:verify
+pnpm security:verify
+pnpm feishu:verify
+pnpm skill:verify:transfer
+pnpm skill:check:codex
+pnpm reader:inspect
+```
+
+有真实账号且本机服务已经打开时，再运行 `pnpm priority:verify:live` 和 `pnpm intelligence:verify`。测试只能输出匿名计数、覆盖率和标准化错误码。
+
+完成后向用户分别报告：目标项目实际路径、备份位置、覆盖文件数量、构建结果、Skill 实际指向、已验证项、仍需本人授权的账号步骤，以及 ZIP 的 SHA-256。不要声称已迁移任何原机器数据；本包从未包含这些数据。

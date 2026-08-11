@@ -2,10 +2,18 @@
 
 import assert from 'node:assert/strict';
 import { automaticSyncTiming } from '../lib/sync-schedule.mjs';
-import { isActiveManagedLease } from '../lib/session-lease-policy.mjs';
+import {
+  completedSyncAllowsSemanticAnalysis,
+  UPDATE_INTERVAL_MS,
+  UPDATE_INTERVAL_MINUTES,
+} from '../lib/update-cadence.mjs';
+import {
+  heartbeatManagedLease,
+  isActiveManagedLease,
+} from '../lib/session-lease-policy.mjs';
 
 const now = 1_800_000;
-const intervalMs = 30 * 60 * 1_000;
+const intervalMs = UPDATE_INTERVAL_MS;
 
 assert.deepEqual(
   automaticSyncTiming({ now, intervalMs, lastSuccessAt: null, lastAttemptAt: null }),
@@ -19,7 +27,7 @@ assert.deepEqual(
     lastAttemptAt: now - 60_000,
   }),
   { due: false, nextDueAt: now - 60_000 + intervalMs },
-  'A recent failed or manual attempt must apply the same 30-minute backoff.',
+  'A recent failed or manual attempt must apply the same 10-minute backoff.',
 );
 assert.equal(
   automaticSyncTiming({
@@ -30,6 +38,11 @@ assert.equal(
   }).due,
   true,
 );
+assert.equal(UPDATE_INTERVAL_MS, 10 * 60 * 1000);
+assert.equal(UPDATE_INTERVAL_MINUTES, 10);
+assert.equal(completedSyncAllowsSemanticAnalysis('ok'), true);
+assert.equal(completedSyncAllowsSemanticAnalysis('partial'), false);
+assert.equal(completedSyncAllowsSemanticAnalysis('failed'), false);
 
 const projectRoot = '/private/project';
 const state = {
@@ -58,17 +71,63 @@ assert.equal(
   false,
 );
 
+const viewerHeartbeat = heartbeatManagedLease(
+  {
+    ...lease,
+    skill_expires_at: now - 1,
+    expires_at: now + 1,
+    last_viewer_heartbeat_at: now - 60_000,
+  },
+  state,
+  projectRoot,
+  now,
+  3 * 60_000,
+);
+assert.equal(viewerHeartbeat?.expires_at, now + 3 * 60_000);
+assert.equal(viewerHeartbeat?.last_viewer_heartbeat_at, now);
+assert.equal(
+  heartbeatManagedLease(
+    { ...lease, expires_at: now, last_viewer_heartbeat_at: now - 60_000 },
+    state,
+    projectRoot,
+    now,
+    3 * 60_000,
+  ),
+  null,
+  'An expired viewer lease must not be revived by a late heartbeat.',
+);
+assert.equal(
+  heartbeatManagedLease(
+    {
+      ...lease,
+      skill_expires_at: now - 1,
+      last_viewer_heartbeat_at: null,
+    },
+    state,
+    projectRoot,
+    now,
+    3 * 60_000,
+  ),
+  null,
+  'The first viewer heartbeat must arrive during the Skill grace window.',
+);
+
 process.stdout.write(
   `${JSON.stringify(
     {
       status: 'verified',
-      summary: 'Session lease and 30-minute viewer-sync timing policies passed.',
+      summary: 'Session lease and 10-minute dual-sync-to-Terra timing policies passed.',
       checks: {
         first_run_due: true,
         failed_attempt_backoff: true,
         viewer_expiry_rejected: true,
         skill_expiry_rejected: true,
         session_mismatch_rejected: true,
+        active_viewer_outlives_initial_skill_window: true,
+        expired_viewer_not_revived: true,
+        unopened_session_not_revived: true,
+        ten_minute_update_interval: true,
+        terra_requires_complete_sync: true,
       },
     },
     null,

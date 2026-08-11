@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import Sidebar from '@/components/Sidebar';
+import { DASHBOARD_REFRESH_EVENT } from '@/lib/dashboard-refresh-events';
 
 type OpportunityStatus = 'new' | 'following' | 'converted' | 'dismissed';
 type Opportunity = {
@@ -71,9 +72,14 @@ export default function OpportunitiesPage() {
   useEffect(() => {
     const initial = window.setTimeout(() => void load(), 0);
     const timer = window.setInterval(load, 60_000);
+    const reloadUpdatedData = () => void load();
+    window.addEventListener(DASHBOARD_REFRESH_EVENT, reloadUpdatedData);
+    window.addEventListener('focus', reloadUpdatedData);
     return () => {
       window.clearTimeout(initial);
       window.clearInterval(timer);
+      window.removeEventListener(DASHBOARD_REFRESH_EVENT, reloadUpdatedData);
+      window.removeEventListener('focus', reloadUpdatedData);
     };
   }, [load]);
 

@@ -5,6 +5,7 @@ import {
   prioritySettings,
   removePriorityKeyword,
   setConversationStarred,
+  updatePriorityKeywordSource,
 } from '@/lib/conversation-priorities';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,12 @@ const UpdateSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('add_keyword'),
     keyword: z.string().min(1).max(128),
+    source: z.enum(['wechat', 'feishu', 'all']).default('all'),
+  }),
+  z.object({
+    action: z.literal('update_keyword_source'),
+    id: z.string().regex(/^kw_[a-f0-9]{28}$/),
+    source: z.enum(['wechat', 'feishu', 'all']),
   }),
   z.object({
     action: z.literal('remove_keyword'),
@@ -47,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
   } else if (parsed.data.action === 'add_keyword') {
     try {
-      addPriorityKeyword(parsed.data.keyword);
+      addPriorityKeyword(parsed.data.keyword, parsed.data.source);
     } catch (error) {
       const code = error instanceof Error ? error.message : 'INVALID_PRIORITY_KEYWORD';
       return NextResponse.json(
@@ -60,6 +67,13 @@ export async function POST(request: NextRequest) {
               : '关键词不能为空或格式无效。',
         },
         { status: 400 },
+      );
+    }
+  } else if (parsed.data.action === 'update_keyword_source') {
+    if (!updatePriorityKeywordSource(parsed.data.id, parsed.data.source)) {
+      return NextResponse.json(
+        { ok: false, code: 'PRIORITY_KEYWORD_NOT_FOUND', error: '未找到这个关键词。' },
+        { status: 404 },
       );
     }
   } else if (!removePriorityKeyword(parsed.data.id)) {

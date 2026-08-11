@@ -32,10 +32,18 @@ try {
   const keywordResult = await requestJson('/api/priorities', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ action: 'add_keyword', keyword: probeKeyword }),
+    body: JSON.stringify({
+      action: 'add_keyword',
+      keyword: probeKeyword,
+      source: 'wechat',
+    }),
   });
-  probeKeywordId = keywordResult.keywords.find((entry) => entry.keyword === probeKeyword)?.id;
+  const createdKeyword = keywordResult.keywords.find(
+    (entry) => entry.keyword === probeKeyword,
+  );
+  probeKeywordId = createdKeyword?.id;
   assert.match(probeKeywordId ?? '', /^kw_[a-f0-9]{28}$/);
+  assert.equal(createdKeyword?.source, 'wechat');
   const database = new Database(join(homedir(), '.wechat-dashboard', 'dashboard.db'), {
     readonly: true,
     fileMustExist: true,
@@ -49,6 +57,26 @@ try {
   } finally {
     database.close();
   }
+
+  const updatedKeyword = await requestJson('/api/priorities', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      action: 'update_keyword_source',
+      id: probeKeywordId,
+      source: 'feishu',
+    }),
+  });
+  assert.equal(
+    updatedKeyword.keywords.find((entry) => entry.id === probeKeywordId)?.source,
+    'feishu',
+  );
+
+  const insight = await requestJson(
+    `/api/keywords?id=${encodeURIComponent(probeKeywordId)}&range=day`,
+  );
+  assert.equal(insight.keyword.source, 'feishu');
+  assert.equal(insight.counts.wechat, 0);
 
   const searchResult = await requestJson(
     `/api/dashboard?range=week&type=group&q=${encodeURIComponent(group.name)}`,
@@ -82,6 +110,8 @@ process.stdout.write(
         star_round_trip: true,
         keyword_round_trip: true,
         keyword_ciphertext_at_rest: true,
+        keyword_source_round_trip: true,
+        keyword_source_filter: true,
         group_search: true,
         original_preferences_restored: true,
       },

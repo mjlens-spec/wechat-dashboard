@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { resolveFeishuSyncCompletion } from '../lib/feishu-sync-policy.mjs';
 
 const previousSuccessAt = 1_700_000_000_000;
-const attemptedAt = previousSuccessAt + 30 * 60 * 1000;
+const attemptedAt = previousSuccessAt + 10 * 60 * 1000;
 
 assert.deepEqual(
   resolveFeishuSyncCompletion({ truncated: true, attemptedAt, previousSuccessAt }),

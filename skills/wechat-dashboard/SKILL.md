@@ -11,7 +11,7 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
 
 - Do not create a Codex Automation, cron entry, heartbeat automation, LaunchAgent, or other permanent scheduler.
 - Start the Dashboard with the bridge. The managed local server has a short lease and only listens on `127.0.0.1`.
-- Any Dashboard page sends a local heartbeat while it is open. The heartbeat starts a due local message sync about every 30 minutes and can keep the server alive only up to the current Skill lease. After all pages close, the managed server expires within about three minutes.
+- Any Dashboard page sends a local heartbeat while it is open. The first heartbeat must arrive during the Skill opening grace window; after that, the viewer lease renews independently while a page remains open. The heartbeat starts a due WeChat and Feishu group/private message sync about every 10 minutes. After all pages close, the managed server expires within about three minutes.
 - Semantic analysis can repeat only while the current Terra High-capable Codex task remains active. When the task ends, no model analysis continues in the background.
 - Stop immediately when the user asks, the managed listener becomes unreachable, or the bridge reports that the Dashboard viewer is closed.
 
@@ -26,7 +26,7 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
 
 ## Choose a Mode
 
-- Use `scheduled` by default. It updates separate per-conversation summaries,重点关注提示, and潜在商机提示 when the 30-minute semantic interval is due.
+- Use `scheduled` by default. It updates separate per-conversation summaries,重点关注提示, and潜在商机提示 when the 10-minute semantic interval is due.
 - Use `summaries` when the user asks only for conversation summaries now.
 - Use `alerts` when the user asks only for重点关注提示.
 - Use `opportunities` when the user asks only for潜在商机提示.
@@ -53,7 +53,7 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
 
    `zsh <skill-dir>/scripts/run-bridge.zsh prepare --mode <mode> --session-minutes <10-or-35>`
 
-   Use `10` for one immediate run and `35` when starting active monitoring.
+   Use `10` for one immediate run and `20` when starting active monitoring.
 
 2. Inspect the compact JSON envelope. Stop on `status: "blocked"` and report its `summary` plus `next_actions`. Return on `status: "no_work"`.
 3. Use exactly Terra High: model `gpt-5.6-terra`, reasoning `high`. Do not use Luna, another model, or a lower/higher effort.
@@ -70,28 +70,28 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
    `zsh <skill-dir>/scripts/run-bridge.zsh import --context <context-path> --result <result-path>`
 
 9. Confirm `status: "imported"`. Report imported counts and Dashboard pages only; do not quote source messages.
-10. Leave the opened Dashboard available for a short viewing window by running:
+10. Leave the opened Dashboard available by running:
 
     `zsh <skill-dir>/scripts/run-bridge.zsh ensure --session-minutes 10`
 
-    Do not stop the service immediately after a successful one-off import; it will still expire at the lease limit or shortly after all Dashboard pages close.
+    Do not stop the service immediately after a successful one-off import. The 10-minute value is the fallback opening grace; an already-open Dashboard page keeps the viewer lease active and local sync running until all pages close.
 
-## Active 30-Minute Monitoring
+## Active 10-Minute Monitoring
 
 After the first successful cycle:
 
-1. Renew the task-scoped lease with `ensure --session-minutes 35`, then run `status`. Continue only when `service.managed` and `service.viewer_active` are both `true`.
-2. Keep the current Terra High-capable Codex task active and wait 30 minutes without creating any scheduled automation.
+1. Renew the task-scoped lease with `ensure --session-minutes 20`, then run `status`. Continue only when `service.managed` and `service.viewer_active` are both `true`.
+2. Keep the current Terra High-capable Codex task active and wait 10 minutes after the prior cycle completes, without creating any scheduled automation.
 3. Run the next cycle with:
 
-   `zsh <skill-dir>/scripts/run-bridge.zsh prepare --mode scheduled --session-minutes 35 --require-viewer true`
+   `zsh <skill-dir>/scripts/run-bridge.zsh prepare --mode scheduled --session-minutes 20 --require-viewer true --sync-policy due`
 
 4. If the bridge returns `DASHBOARD_VIEWER_CLOSED`, stop the monitoring loop and do not restart the listener automatically.
 5. Otherwise analyze and import as above, then repeat while the task is active and the viewer remains open.
 
 This loop is task-scoped. It is not an always-on background feature. If the current agent task cannot remain active for a full interval, explain that periodic semantic analysis has stopped; the local page may continue only until its short lease expires.
 
-Before ending the Codex task, shorten the opened viewing session with `ensure --session-minutes 10`. Run `stop` instead only when the user explicitly asks to stop or the listener/viewer is no longer valid. Never leave a 35-minute monitoring lease as if the task were still active.
+Before ending the Codex task, reset the Skill opening grace with `ensure --session-minutes 10`. This stops periodic semantic analysis but does not interrupt an already-open page; the page may continue local 10-minute sync until it closes. Run `stop` instead only when the user explicitly asks to stop or the listener/viewer is no longer valid. Never leave a 20-minute semantic-monitoring lease as if the task were still active.
 
 ## Stop
 
@@ -119,7 +119,7 @@ For潜在商机提示, use only `new_demand`, `budget_signal`, `collaboration`, 
 ## Failure Handling
 
 - If the production build is missing, report the bridge action to run `pnpm build`; do not start a dev server as a hidden fallback.
-- If sync fails but a prior snapshot exists, the bridge may export it with a warning. Clearly label the analysis as using the latest available local snapshot.
+- If sync fails, is partial, or times out, do not start Terra for that cycle. Keep the prior encrypted analysis intact and retry on the next 10-minute cycle.
 - If Terra High is unavailable, do not import a result produced by another model or reasoning effort. Report `TERRA_HIGH_UNAVAILABLE` and keep the encrypted local snapshot available.
 - If import rejects evidence or schema, correct the result once and retry. Stop after a second identical validation failure and report the exact error code.
 - If the local server cannot be started without approval, pause for that approval. Do not install a persistent service.

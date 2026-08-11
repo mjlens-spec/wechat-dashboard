@@ -8,8 +8,9 @@
 - 微信只读同步与飞书用户身份只读同步；
 - 群聊汇总、重点关注提示和潜在商机；
 - Terra High 语义分析契约与同会话 evidence 校验；
-- SQLite 字段级加密、loopback 服务和按需会话租约；
+- SQLite 字段级加密、带来源范围的自定义关键词、loopback 服务和页面心跳按需租约；
 - Codex Skill、项目专用运行时自举、安装与验收脚本；
+- 面向既有安装的 Codex 升级说明、相对路径源码清单和升级前备份要求；
 - 锁定的 pnpm 依赖清单、隐私和安全文档。
 
 ## 主动排除
@@ -29,6 +30,12 @@
 5. 打开 `/setup`，确认本机隐私边界和两端状态，再开始同步。
 6. ChatGPT Pro 可提供 Codex 使用资格，但不保证宿主一定暴露 `gpt-5.6-terra`。Skill 优先创建隔离的 Terra High 执行单元；宿主无法提供该模型与推理强度时，只运行本机同步和页面。
 
+## 另一台 Mac 的覆盖升级
+
+把完整 ZIP 上传给另一台 Mac 的 Codex 后，让它先阅读包外层的 `AGENTS.md` 和 `CODEX_UPGRADE.md`。升级过程不假设原项目的绝对路径：Codex 应优先从 `~/.codex/skills/wechat-dashboard` 的现有链接反向定位项目，也可以在用户指定的工作区内查找 `package.json` 中名称为 `wechat-feishu-message-analysis-dashboard` 的目录。
+
+确认目标后，先检查未提交改动并备份即将覆盖的源码，再按 `SOURCE_FILES.json` 的相对路径覆盖。不得覆盖或复制 `.env`、`.runtime`、`node_modules`、本机数据库、`~/.wechat-dashboard`、`~/.wx-cli`、飞书令牌或 Keychain 内容。完成后重装锁定依赖、重新构建、安装或核验 Skill，并运行验收命令。详细步骤以包内 `CODEX_UPGRADE.md` 为准。
+
 ## 验收基线
 
 ```bash
@@ -39,6 +46,7 @@ pnpm lint
 pnpm build
 pnpm intelligence:verify
 pnpm priority:verify
+pnpm keyword:verify
 pnpm session:verify
 pnpm security:verify
 pnpm feishu:verify

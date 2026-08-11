@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Settings2,
   ShieldCheck,
+  Tags,
 } from 'lucide-react';
 
 type SyncStatus = {
@@ -26,25 +27,39 @@ export default function Sidebar() {
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [openAlerts, setOpenAlerts] = useState(0);
   const [openOpportunities, setOpenOpportunities] = useState(0);
+  const [keywords, setKeywords] = useState<Array<{
+    id: string;
+    keyword: string;
+    source: 'wechat' | 'feishu' | 'all';
+  }>>([]);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [syncResponse, attentionResponse, opportunityResponse] = await Promise.all([
+        const [syncResponse, attentionResponse, opportunityResponse, keywordResponse] = await Promise.all([
           fetch('/api/sync', { cache: 'no-store' }),
           fetch('/api/attention', { cache: 'no-store' }),
           fetch('/api/opportunities', { cache: 'no-store' }),
+          fetch('/api/priorities', { cache: 'no-store' }),
         ]);
-        const [data, attention, opportunities] = await Promise.all([
+        const [data, attention, opportunities, prioritySettings] = await Promise.all([
           syncResponse.json() as Promise<SyncStatus>,
           attentionResponse.json() as Promise<{ counts?: { open?: number } }>,
           opportunityResponse.json() as Promise<{ counts?: { new?: number } }>,
+          keywordResponse.json() as Promise<{
+            keywords?: Array<{
+              id: string;
+              keyword: string;
+              source: 'wechat' | 'feishu' | 'all';
+            }>;
+          }>,
         ]);
         if (!cancelled) {
           setSync(data);
           setOpenAlerts(attention.counts?.open ?? 0);
           setOpenOpportunities(opportunities.counts?.new ?? 0);
+          setKeywords(prioritySettings.keywords ?? []);
         }
       } catch {
         if (!cancelled) setSync(null);
@@ -111,6 +126,21 @@ export default function Sidebar() {
           active={pathname === '/attention'}
           badge={openAlerts}
         />
+        {keywords.length > 0 && (
+          <div className="sidebar-section-label sidebar-keyword-label">
+            自定义关键词
+          </div>
+        )}
+        {keywords.map((keyword) => (
+          <NavItem
+            key={keyword.id}
+            href={`/keywords/${keyword.id}`}
+            icon={<Tags size={15} />}
+            label={keyword.keyword}
+            active={pathname === `/keywords/${keyword.id}`}
+            meta={sourceShortLabel(keyword.source)}
+          />
+        ))}
         <NavItem
           href="/setup"
           icon={<Settings2 size={15} />}
@@ -139,12 +169,14 @@ function NavItem({
   label,
   active,
   badge,
+  meta,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   active: boolean;
   badge?: number;
+  meta?: string;
 }) {
   return (
     <Link
@@ -153,7 +185,12 @@ function NavItem({
     >
       {icon}
       <span>{label}</span>
+      {meta && <span className="sidebar-source">{meta}</span>}
       {Boolean(badge) && <span className="sidebar-badge">{badge}</span>}
     </Link>
   );
+}
+
+function sourceShortLabel(source: 'wechat' | 'feishu' | 'all') {
+  return source === 'wechat' ? '微' : source === 'feishu' ? '飞' : '双';
 }
