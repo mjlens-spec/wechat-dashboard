@@ -33,7 +33,7 @@ export default function ConversationList({
 
       {conversations.length === 0 ? (
         <div className="px-5 py-16 text-center text-[13px] text-[var(--text-3)]">
-          暂无会话数据。读取器就绪后会在 10 分钟内自动同步。
+          暂无会话数据。读取器就绪后会在 15 分钟内自动同步。
         </div>
       ) : (
         <div className="divide-y divide-[var(--border-soft)]">

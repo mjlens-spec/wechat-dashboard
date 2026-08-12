@@ -46,7 +46,7 @@ export default function StatGrid({
         icon={<Wifi size={15} className={stale ? 'text-[var(--danger)]' : 'text-[var(--accent)]'} />}
         label="数据新鲜度"
         value={lastSuccessAt ? relativeTime(lastSuccessAt) : '未同步'}
-        sub={stale ? '已超过 20 分钟，请检查读取器' : '页面打开时每 10 分钟刷新'}
+        sub={stale ? '已超过 30 分钟，请检查读取器' : '页面打开时每 15 分钟刷新'}
         accent={stale ? 'danger' : undefined}
       />
     </div>

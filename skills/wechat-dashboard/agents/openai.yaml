@@ -2,7 +2,7 @@ interface:
   display_name: "微信分析启动"
   short_description: "打开本机微信 × 飞书 Dashboard，并更新双端会话分析"
   brand_color: "#4D675B"
-  default_prompt: "Use $wechat-dashboard to open the local Dashboard and refresh separate WeChat and Feishu summaries, attention items, and opportunities with Terra High."
+  default_prompt: "Use $wechat-dashboard to refresh or open the local Dashboard in the macOS default browser, then keep its separate WeChat and Feishu summaries, attention items, and opportunities updated every 15 minutes with Terra High while this task and the page remain active."
 
 policy:
   allow_implicit_invocation: true

@@ -1,6 +1,6 @@
 {
   "name": "wechat-feishu-message-analysis-dashboard",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "packageManager": "pnpm@11.16.0",
   "scripts": {
@@ -22,6 +22,7 @@
     "skill:verify:transfer": "node scripts/verify-skill-transfer.mjs",
     "package:transfer": "node scripts/package-transfer.mjs",
     "session:start": "node skills/wechat-dashboard/scripts/dashboard-bridge.mjs start",
+    "session:open": "node skills/wechat-dashboard/scripts/dashboard-bridge.mjs open",
     "session:status": "node skills/wechat-dashboard/scripts/dashboard-bridge.mjs status",
     "session:stop": "node skills/wechat-dashboard/scripts/dashboard-bridge.mjs stop",
     "session:verify": "node scripts/verify-session-runtime.mjs",

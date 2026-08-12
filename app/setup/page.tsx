@@ -161,7 +161,7 @@ export default function SetupPage() {
         <div className="flex items-center gap-2"><span className="brand-mark" /><div className="report-kicker">Dual Chat Dashboard Setup</div></div>
         <h1>配置微信与飞书会话分析</h1>
         <p>
-          微信从这台 Mac 只读同步，飞书通过一次用户认证读取。两端数据均加密保存在本机；页面打开期间每 10 分钟刷新一次。
+          微信从这台 Mac 只读同步，飞书通过一次用户认证读取。两端数据均加密保存在本机；页面打开期间每 15 分钟刷新一次。
         </p>
         </header>
 
@@ -244,7 +244,7 @@ export default function SetupPage() {
           <section className="setup-section">
             <SectionTitle icon={<Clock3 size={15} />} title="同步范围" />
             <p className="mt-3 text-[13px] leading-relaxed text-[var(--text-3)]">
-              首次只导入会话元数据，再读取最近 2 小时的少量活跃会话；当天消息按批次继续补齐。之后页面打开时每 10 分钟读取群聊和私信新增消息，每小时做一次时间戳对账。
+              首次只导入会话元数据，再读取最近 2 小时的少量活跃会话；当天消息按批次继续补齐。之后页面打开时每 15 分钟读取群聊和私信新增消息，每小时做一次时间戳对账。
             </p>
             <div className="setup-ledger">
               <div><span>最近 2 小时</span><span>快速同步</span></div>
@@ -258,7 +258,7 @@ export default function SetupPage() {
             <div className="setup-ledger mt-3">
               <div><span>分析模型</span><span>Terra High</span></div>
               <div><span>群聊</span><span>微信 + 飞书</span></div>
-              <div><span>双端更新</span><span>每 10 分钟</span></div>
+              <div><span>双端更新</span><span>每 15 分钟</span></div>
               <div><span>语义顺序</span><span>同步完成后运行 Terra</span></div>
             </div>
             <label className="mt-4 flex items-start gap-2 text-[14px]">

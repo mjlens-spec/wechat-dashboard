@@ -98,7 +98,7 @@ export default function SummariesPage() {
                 <div className="report-kicker">10 Min · Agent Intelligence</div>
                 <h1>会话汇总</h1>
                 <p>
-                  微信与飞书分区展示；每个群聊或私信独立汇总，每 10 分钟由当前 Terra High 任务更新。
+                  微信与飞书分区展示；每个群聊或私信独立汇总，每 15 分钟由当前 Terra High 任务更新。
                 </p>
               </div>
             </div>

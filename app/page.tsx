@@ -449,7 +449,7 @@ function DashboardStateNotice({
       <div className="dashboard-state dashboard-state-danger">
         <WifiOff size={15} />
         <div>
-          <strong>已超过 20 分钟未同步</strong>
+          <strong>已超过 30 分钟未同步</strong>
           <span>当前数字可能不完整，请检查读取器状态或立即刷新。</span>
         </div>
         <button className="btn btn-primary" onClick={onSync}>立即刷新</button>

@@ -181,7 +181,7 @@ export default function AttentionPage() {
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-3)]">
               <Clock3 size={12} />
-              当前 Terra Skill 任务运行且页面打开时每 10 分钟检查一次 · 结论必须引用本机消息证据
+              当前 Terra Skill 任务运行且页面打开时每 15 分钟检查一次 · 结论必须引用本机消息证据
             </div>
           </div>
 

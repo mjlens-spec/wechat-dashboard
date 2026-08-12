@@ -11,6 +11,11 @@ import {
   heartbeatManagedLease,
   isActiveManagedLease,
 } from '../lib/session-lease-policy.mjs';
+import {
+  browserAutomationAdapter,
+  existingPageRefreshAppleScript,
+  selectDefaultHttpBrowserBundleId,
+} from '../lib/default-browser-policy.mjs';
 
 const now = 1_800_000;
 const intervalMs = UPDATE_INTERVAL_MS;
@@ -27,7 +32,7 @@ assert.deepEqual(
     lastAttemptAt: now - 60_000,
   }),
   { due: false, nextDueAt: now - 60_000 + intervalMs },
-  'A recent failed or manual attempt must apply the same 10-minute backoff.',
+  'A recent failed or manual attempt must apply the same 15-minute backoff.',
 );
 assert.equal(
   automaticSyncTiming({
@@ -38,8 +43,8 @@ assert.equal(
   }).due,
   true,
 );
-assert.equal(UPDATE_INTERVAL_MS, 10 * 60 * 1000);
-assert.equal(UPDATE_INTERVAL_MINUTES, 10);
+assert.equal(UPDATE_INTERVAL_MS, 15 * 60 * 1000);
+assert.equal(UPDATE_INTERVAL_MINUTES, 15);
 assert.equal(completedSyncAllowsSemanticAnalysis('ok'), true);
 assert.equal(completedSyncAllowsSemanticAnalysis('partial'), false);
 assert.equal(completedSyncAllowsSemanticAnalysis('failed'), false);
@@ -112,11 +117,34 @@ assert.equal(
   'The first viewer heartbeat must arrive during the Skill grace window.',
 );
 
+const defaultBrowser = selectDefaultHttpBrowserBundleId([
+  {
+    LSHandlerURLScheme: 'http',
+    LSHandlerRoleAll: 'com.apple.Safari',
+    LSHandlerModificationDate: 100,
+  },
+  {
+    LSHandlerURLScheme: 'http',
+    LSHandlerRoleAll: 'com.google.chrome',
+    LSHandlerModificationDate: 200,
+  },
+]);
+assert.equal(defaultBrowser, 'com.google.chrome');
+const chromeAdapter = browserAutomationAdapter(defaultBrowser);
+assert.deepEqual(chromeAdapter, {
+  bundleId: 'com.google.Chrome',
+  kind: 'chromium',
+});
+const refreshScript = existingPageRefreshAppleScript(chromeAdapter);
+assert.match(refreshScript, /set URL of browserTab to targetURL/);
+assert.match(refreshScript, /return "refreshed_existing_page"/);
+assert.equal(browserAutomationAdapter('org.mozilla.firefox'), null);
+
 process.stdout.write(
   `${JSON.stringify(
     {
       status: 'verified',
-      summary: 'Session lease and 10-minute dual-sync-to-Terra timing policies passed.',
+      summary: 'Session lease, default-browser reuse, and 15-minute dual-sync-to-Terra timing policies passed.',
       checks: {
         first_run_due: true,
         failed_attempt_backoff: true,
@@ -126,7 +154,8 @@ process.stdout.write(
         active_viewer_outlives_initial_skill_window: true,
         expired_viewer_not_revived: true,
         unopened_session_not_revived: true,
-        ten_minute_update_interval: true,
+        fifteen_minute_update_interval: true,
+        default_browser_existing_page_refresh: true,
         terra_requires_complete_sync: true,
       },
     },

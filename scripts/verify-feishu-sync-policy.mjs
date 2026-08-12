@@ -2,9 +2,10 @@
 
 import assert from 'node:assert/strict';
 import { resolveFeishuSyncCompletion } from '../lib/feishu-sync-policy.mjs';
+import { UPDATE_INTERVAL_MS } from '../lib/update-cadence.mjs';
 
 const previousSuccessAt = 1_700_000_000_000;
-const attemptedAt = previousSuccessAt + 10 * 60 * 1000;
+const attemptedAt = previousSuccessAt + UPDATE_INTERVAL_MS;
 
 assert.deepEqual(
   resolveFeishuSyncCompletion({ truncated: true, attemptedAt, previousSuccessAt }),

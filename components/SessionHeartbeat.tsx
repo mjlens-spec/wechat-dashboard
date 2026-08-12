@@ -5,6 +5,7 @@ import {
   DASHBOARD_REFRESH_EVENT,
   type DashboardRefreshReason,
 } from '@/lib/dashboard-refresh-events';
+import { UPDATE_INTERVAL_MS } from '@/lib/update-cadence.mjs';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const SYNC_POLL_INTERVAL_MS = 1_500;
@@ -33,6 +34,8 @@ export default function SessionHeartbeat() {
 
   useEffect(() => {
     let cancelled = false;
+    let pageRefreshStarted = false;
+    const pageRefreshDueAt = Date.now() + UPDATE_INTERVAL_MS;
 
     const notify = (reason: DashboardRefreshReason) => {
       window.dispatchEvent(
@@ -105,18 +108,38 @@ export default function SessionHeartbeat() {
       }
     };
 
+    const refreshPageWhenDue = () => {
+      if (
+        pageRefreshStarted ||
+        Date.now() < pageRefreshDueAt
+      ) {
+        return;
+      }
+      pageRefreshStarted = true;
+      window.location.reload();
+    };
+
     void heartbeat();
     const interval = window.setInterval(() => void heartbeat(), HEARTBEAT_INTERVAL_MS);
+    const pageRefresh = window.setTimeout(refreshPageWhenDue, UPDATE_INTERVAL_MS);
     const resume = () => {
-      if (document.visibilityState === 'visible') void heartbeat();
+      if (document.visibilityState === 'visible') {
+        refreshPageWhenDue();
+        if (!pageRefreshStarted) void heartbeat();
+      }
     };
-    window.addEventListener('focus', heartbeat);
+    const focus = () => {
+      refreshPageWhenDue();
+      if (!pageRefreshStarted) void heartbeat();
+    };
+    window.addEventListener('focus', focus);
     window.addEventListener('online', heartbeat);
     document.addEventListener('visibilitychange', resume);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
-      window.removeEventListener('focus', heartbeat);
+      window.clearTimeout(pageRefresh);
+      window.removeEventListener('focus', focus);
       window.removeEventListener('online', heartbeat);
       document.removeEventListener('visibilitychange', resume);
     };

@@ -20,6 +20,11 @@ import {
   securePrivateFile,
 } from '../../../lib/private-paths.mjs';
 import { completedSyncAllowsSemanticAnalysis } from '../../../lib/update-cadence.mjs';
+import {
+  browserAutomationAdapter,
+  existingPageRefreshAppleScript,
+  selectDefaultHttpBrowserBundleId,
+} from '../../../lib/default-browser-policy.mjs';
 
 class BridgeFailure extends Error {
   constructor(code, message, nextActions) {
@@ -40,9 +45,16 @@ const nextBin = join(projectRoot, 'node_modules', 'next', 'dist', 'bin', 'next')
 const buildId = join(projectRoot, '.next', 'BUILD_ID');
 const serviceScript = join(projectRoot, 'scripts', 'session-service.mjs');
 const dataDir = join(homedir(), '.wechat-dashboard');
+const launchServicesPreferences = join(
+  homedir(),
+  'Library',
+  'Preferences',
+  'com.apple.LaunchServices',
+  'com.apple.launchservices.secure.plist',
+);
 const leasePath = join(dataDir, 'session-lease.json');
 const statePath = join(dataDir, 'session-service.json');
-const DEFAULT_SESSION_MINUTES = 10;
+const DEFAULT_SESSION_MINUTES = 15;
 const MAX_SESSION_MINUTES = 60;
 const VIEWER_ACTIVE_WINDOW_MS = 150_000;
 
@@ -59,13 +71,30 @@ try {
     );
   } else if (command === 'import') {
     await importResult(args.context, args.result);
+  } else if (command === 'open') {
+    if (!(await dashboardReachable())) {
+      fail('DASHBOARD_UNREACHABLE', '本机 Dashboard 尚未启动，无法打开页面。', [
+        '先运行 start，再重试 open。',
+      ]);
+    }
+    const browser = openDashboardInDefaultBrowser();
+    print({
+      status: 'opened',
+      summary:
+        browser.action === 'refreshed_existing_page'
+          ? '默认浏览器中已有 Dashboard 页面，已直接刷新。'
+          : '默认浏览器中没有 Dashboard 页面，已新开一页。',
+      next_actions: [],
+      artifacts: [{ kind: 'dashboard_url', url: baseUrl.href }],
+      browser,
+    });
   } else if (command === 'start' || command === 'ensure') {
     const service = await ensureDashboard(sessionMinutes(args['session-minutes']), false);
     print({
       status: 'running',
       summary: 'WeChat Dashboard 已按需启动。',
       next_actions: [
-        `在 Chrome 打开 ${baseUrl.origin}。`,
+        `用 open 命令在默认浏览器刷新或打开 ${baseUrl.href}。`,
         '在 Codex 中继续运行 $wechat-dashboard；关闭页面后临时服务会自动退出。',
       ],
       artifacts: [{ kind: 'dashboard_url', url: baseUrl.origin }],
@@ -77,7 +106,7 @@ try {
     await status();
   } else {
     fail('UNKNOWN_COMMAND', `Unknown command: ${command}`, [
-      'Use start, prepare, import, status, or stop.',
+      'Use start, open, prepare, import, status, or stop.',
     ]);
   }
 } catch (error) {
@@ -121,14 +150,14 @@ async function prepare(mode, service, syncPolicy) {
   } catch (error) {
     if (error instanceof BridgeFailure) throw error;
     fail('SYNC_FAILED', '本次双端消息更新失败，已跳过 Terra 语义分析。', [
-      '保持 Dashboard 页面打开，下一次 10 分钟周期会自动重试。',
+      '保持 Dashboard 页面打开，下一次 15 分钟周期会自动重试。',
     ]);
   }
   if (!completedSyncAllowsSemanticAnalysis(sync?.status)) {
     fail(
       'SYNC_INCOMPLETE',
       '微信与飞书消息尚未完整更新，已跳过本轮 Terra 语义分析。',
-      ['保持页面打开，下一次 10 分钟周期会自动重试。'],
+      ['保持页面打开，下一次 15 分钟周期会自动重试。'],
     );
   }
 
@@ -495,6 +524,87 @@ function processIsAlive(pid) {
   }
 }
 
+function openDashboardInDefaultBrowser() {
+  if (process.platform !== 'darwin') {
+    fail('UNSUPPORTED_PLATFORM', '默认浏览器复用目前只支持 macOS。', []);
+  }
+  let handlers = [];
+  if (existsSync(launchServicesPreferences)) {
+    try {
+      handlers = JSON.parse(
+        execFileSync(
+          '/usr/bin/plutil',
+          ['-extract', 'LSHandlers', 'json', '-o', '-', launchServicesPreferences],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+        ),
+      );
+    } catch {
+      try {
+        execFileSync('/usr/bin/plutil', ['-lint', launchServicesPreferences], {
+          stdio: 'ignore',
+        });
+      } catch {
+        fail('DEFAULT_BROWSER_UNKNOWN', '无法读取 macOS 默认浏览器设置，已停止打开页面。', [
+          '确认系统设置中已选择默认浏览器，再重试一次。',
+        ]);
+      }
+    }
+  }
+  const bundleId = selectDefaultHttpBrowserBundleId(handlers) ?? 'com.apple.Safari';
+  const adapter = browserAutomationAdapter(bundleId);
+  if (!adapter) {
+    fail(
+      'DEFAULT_BROWSER_UNSUPPORTED',
+      `当前默认浏览器（${bundleId}）不支持安全检查已有 Dashboard 标签页。`,
+      ['把默认浏览器切换为 Safari 或兼容 Chromium 的浏览器后重试。'],
+    );
+  }
+
+  const targetUrl = baseUrl.href;
+  const targetUrlWithoutSlash = targetUrl.endsWith('/')
+    ? targetUrl.slice(0, -1)
+    : targetUrl;
+  let inspection;
+  try {
+    inspection = execFileSync(
+      '/usr/bin/osascript',
+      [
+        '-e',
+        existingPageRefreshAppleScript(adapter),
+        '--',
+        targetUrl,
+        targetUrlWithoutSlash,
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim();
+  } catch {
+    fail(
+      'DEFAULT_BROWSER_INSPECTION_FAILED',
+      '无法检查默认浏览器中的 Dashboard 标签页，已停止以避免重复打开。',
+      ['允许当前终端或 Codex 控制默认浏览器后重试。'],
+    );
+  }
+
+  if (inspection === 'refreshed_existing_page') {
+    return { bundle_id: bundleId, action: inspection };
+  }
+  if (inspection !== 'page_not_open') {
+    fail('DEFAULT_BROWSER_INVALID_RESPONSE', '默认浏览器返回了无法识别的页面检查结果。', [
+      '重试一次；若仍失败，请检查默认浏览器的 AppleScript 支持。',
+    ]);
+  }
+  try {
+    execFileSync('/usr/bin/open', [targetUrl], {
+      stdio: 'ignore',
+    });
+  } catch {
+    fail('DEFAULT_BROWSER_OPEN_FAILED', '默认浏览器未能打开本机 Dashboard。', [
+      `手动打开 ${targetUrl}，再重试 $wechat-dashboard。`,
+    ]);
+  }
+  return { bundle_id: bundleId, action: 'opened_new_page' };
+}
+
 function cleanupStaleSessionFiles(sessionId) {
   removeOwnedFile(statePath, sessionId);
   removeOwnedFile(leasePath, sessionId);
@@ -574,7 +684,7 @@ function sessionMinutes(value) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 2 || parsed > MAX_SESSION_MINUTES) {
     fail('INVALID_SESSION_DURATION', '按需会话时长必须是 2 到 60 分钟的整数。', [
-      '省略 --session-minutes 可使用默认 10 分钟启动宽限期。',
+      '省略 --session-minutes 可使用默认 15 分钟启动宽限期。',
     ]);
   }
   return parsed;
@@ -632,7 +742,7 @@ async function syncLocalMessages(syncPolicy = 'force') {
   throw new BridgeFailure(
     'SYNC_TIMEOUT',
     '双端消息更新尚未在安全等待时间内完成，已跳过 Terra 语义分析。',
-    ['保持页面打开，下一次 10 分钟周期会自动重试。'],
+    ['保持页面打开，下一次 15 分钟周期会自动重试。'],
   );
 }
 

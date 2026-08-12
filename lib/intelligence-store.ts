@@ -165,7 +165,7 @@ export function createAnalysisExport(
     return {
       status: 'no_work' as const,
       summary: '今天尚无可供分析的本地群聊消息。',
-      next_actions: ['等待下一次 10 分钟双端增量同步'],
+      next_actions: ['等待下一次 15 分钟双端增量同步'],
       artifacts: [],
       context: null,
     };

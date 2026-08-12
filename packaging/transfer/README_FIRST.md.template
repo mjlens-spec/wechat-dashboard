@@ -25,7 +25,7 @@
 - 两端消息和分析结果加密保存在本机，主密钥位于当前 Mac 的 Keychain。
 - 私信只有在对应平台设置中明确开启后，才会进入当前 Codex 任务的受限分析上下文。
 - ChatGPT Pro 可以提供 Codex 使用资格，但不等于保证当前 Codex 环境一定暴露项目指定的 `gpt-5.6-terra`。Skill 会优先创建隔离的 Terra High 执行单元；无法确认 Terra High 时只运行本机同步和页面，不导入其他模型生成的语义结果。
-- 页面打开期间每 10 分钟增量同步一次微信与飞书群聊、私信；当前 Terra 任务只在该轮同步完整成功后开始语义分析。项目不安装 Automation、cron、LaunchAgent 或常驻 AI 任务。
+- 页面打开期间每 15 分钟重新加载，并增量同步一次微信与飞书群聊、私信；当前 Terra 任务只在该轮同步完整成功后开始语义分析。Skill 先复用并刷新默认浏览器里的同一 Dashboard 页面，未打开时才新开一页。项目不安装 Automation、cron、LaunchAgent 或常驻 AI 任务。
 
 ## 目录
 

@@ -26,6 +26,9 @@ try {
   if (!skill.includes('gpt-5.6-terra') || !skill.includes('reasoning `high`')) {
     throw new Error('Terra High contract is missing from installed Skill.');
   }
+  if (!skill.includes('15-minute') || !skill.includes('run-bridge.zsh open')) {
+    throw new Error('15-minute cadence or default-browser reuse is missing from installed Skill.');
+  }
   const wrapper = join(target, 'scripts', 'run-bridge.zsh');
   if ((lstatSync(wrapper).mode & 0o111) === 0) {
     throw new Error('Skill runtime wrapper is not executable.');

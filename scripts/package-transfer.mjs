@@ -167,6 +167,7 @@ function allowedUntrackedSource(path) {
     path.startsWith('app/keywords/') ||
     path === 'lib/keyword-tracking-policy.mjs' ||
     path === 'lib/keyword-tracking.ts' ||
+    path === 'lib/default-browser-policy.mjs' ||
     path === 'lib/update-cadence.mjs' ||
     path === 'scripts/verify-keyword-tracking.mjs' ||
     path === 'packaging/transfer/CODEX_UPGRADE.md.template'

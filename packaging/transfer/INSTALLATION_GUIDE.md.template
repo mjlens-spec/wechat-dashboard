@@ -99,7 +99,7 @@ $wechat-dashboard
 ~/.codex/skills/wechat-dashboard -> <移交包固定位置>/wechat-feishu-message-analysis-dashboard/skills/wechat-dashboard
 ```
 
-其中 `SKILL.md` 规定运行、隐私、10 分钟同步与分析顺序和 Terra High 契约；`agents/openai.yaml` 提供 Codex 显示名称与默认调用提示；`scripts/run-bridge.zsh` 负责寻找系统或项目专用 Node.js。
+其中 `SKILL.md` 规定运行、隐私、15 分钟页面刷新与同步、默认浏览器页面复用、分析顺序和 Terra High 契约；`agents/openai.yaml` 提供 Codex 显示名称与默认调用提示；`scripts/run-bridge.zsh` 负责寻找系统或项目专用 Node.js。
 
 如果 `$wechat-dashboard` 没有出现，先双击 `CHECK.command`。只有“Codex Skill”失败时，在项目目录执行：
 

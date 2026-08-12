@@ -36,6 +36,7 @@ tsconfig.tsbuildinfo
 .playwright-cli/
 output/playwright/
 .release/
+/交付包/
 *.zip
 *.zip.sha256
 
