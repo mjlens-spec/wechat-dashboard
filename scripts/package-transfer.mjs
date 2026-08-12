@@ -30,7 +30,7 @@ const readerTroubleshootingSource = join(
   '微信本机数据读取接入与排障经验_OC_0811[A].md',
 );
 const baseCommit = git(['rev-parse', 'HEAD']).trim();
-const sourceState = git(['status', '--porcelain=v1', '--untracked-files=all']).trim()
+const sourceState = hasPackagedWorkingTreeChanges()
   ? 'working-tree-snapshot'
   : 'clean-commit';
 const stagingRoot = mkdtempSync(join(tmpdir(), 'wechat-feishu-transfer-'));
@@ -148,6 +148,15 @@ function assertNoUnmergedPaths() {
 
 function trackedFiles() {
   return git(['ls-files', '-z']).split('\0').filter(Boolean);
+}
+
+function hasPackagedWorkingTreeChanges() {
+  const trackedChanges = git(['status', '--porcelain=v1', '--untracked-files=no']).trim();
+  if (trackedChanges) return true;
+  return git(['ls-files', '--others', '--exclude-standard', '-z'])
+    .split('\0')
+    .filter(Boolean)
+    .some(allowedUntrackedSource);
 }
 
 function workingTreeFiles() {
