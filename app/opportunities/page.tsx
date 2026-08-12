@@ -7,6 +7,7 @@ import {
   CalendarDays,
   CheckCircle2,
   RefreshCw,
+  RotateCcw,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -137,7 +138,7 @@ export default function OpportunitiesPage() {
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-3)]"><Sparkles size={12} />每条商机必须引用同一会话中的消息证据</div>
+            <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-3)]"><Sparkles size={12} />跟进、转化或忽略后不再重复提示 · 恢复后可重新出现</div>
           </div>
           {error && <div className="mt-4 rounded-md bg-[var(--danger-soft)] px-4 py-3 text-[13px] text-[var(--danger)]">{error}</div>}
           <div className="attention-platform-grid">
@@ -176,6 +177,7 @@ function OpportunityCard({ item, onStatus }: { item: Opportunity; onStatus: (id:
         {item.status === 'new' && <button className="btn btn-primary" onClick={() => void onStatus(item.id, 'following')}><ArrowUpRight size={13} />开始跟进</button>}
         {(item.status === 'new' || item.status === 'following') && <button className="btn" onClick={() => void onStatus(item.id, 'converted')}><CheckCircle2 size={13} />标记转化</button>}
         {(item.status === 'new' || item.status === 'following') && <button className="btn" onClick={() => void onStatus(item.id, 'dismissed')}><X size={13} />忽略</button>}
+        {item.status !== 'new' && <button className="btn" onClick={() => void onStatus(item.id, 'new')}><RotateCcw size={13} />恢复为新线索</button>}
       </div>
     </article>
   );

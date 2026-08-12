@@ -265,39 +265,50 @@ export default function Page() {
               onSync={() => void syncNow('latest')}
               onBootstrap={() => void syncNow('bootstrap')}
             />
-            <section className="platform-dashboard-section">
-              <header className="platform-dashboard-header">
-                <span className="platform-chip platform-chip-wechat">微信</span>
-                <div><h2>微信群聊和私信分析</h2><p>本机只读同步 · 微信优先展示</p></div>
+            <section className="dual-platform-overview">
+              <header className="dual-platform-heading">
+                <div>
+                  <div className="report-kicker">Dual platform · One screen</div>
+                  <h1>微信 × 飞书消息总览</h1>
+                </div>
+                <p>左侧微信，右侧飞书；群聊与私信状态在同一屏内对照。</p>
               </header>
-              <OverviewCockpit
-                platform="wechat"
-                cards={dashboard?.cards}
-                days={dashboard?.window.days ?? 7}
-                coverage={dashboard?.coverage}
-                priorities={dashboard?.priority_workspace}
-                attention={attention}
-                lastSuccessAt={dashboard?.source.last_success_at ?? null}
-                stale={dashboard?.source.stale ?? true}
-              />
+              <div className="platform-overview-grid">
+                <section className="platform-dashboard-section">
+                  <header className="platform-dashboard-header">
+                    <span className="platform-chip platform-chip-wechat">微信</span>
+                    <div><h2>群聊与私信分析</h2><p>本机只读同步 · 微信优先展示</p></div>
+                  </header>
+                  <OverviewCockpit
+                    platform="wechat"
+                    cards={dashboard?.cards}
+                    days={dashboard?.window.days ?? 7}
+                    coverage={dashboard?.coverage}
+                    priorities={dashboard?.priority_workspace}
+                    attention={attention}
+                    lastSuccessAt={dashboard?.source.last_success_at ?? null}
+                    stale={dashboard?.source.stale ?? true}
+                  />
+                </section>
+                <section className="platform-dashboard-section">
+                  <header className="platform-dashboard-header">
+                    <span className="platform-chip platform-chip-feishu">飞书</span>
+                    <div><h2>群聊与私信分析</h2><p>用户身份认证 · 本机加密保存</p></div>
+                  </header>
+                  <OverviewCockpit
+                    platform="feishu"
+                    cards={feishuDashboard?.cards}
+                    days={feishuDashboard?.window.days ?? 7}
+                    coverage={feishuDashboard?.coverage}
+                    priorities={feishuDashboard?.priority_workspace}
+                    attention={attention}
+                    lastSuccessAt={feishuDashboard?.source.last_success_at ?? null}
+                    stale={feishuDashboard?.source.stale ?? true}
+                  />
+                </section>
+              </div>
             </section>
-            <section className="platform-dashboard-section">
-              <header className="platform-dashboard-header">
-                <span className="platform-chip platform-chip-feishu">飞书</span>
-                <div><h2>飞书私信与群聊分析</h2><p>用户身份认证 · 无需本地信息抓取</p></div>
-              </header>
-              <OverviewCockpit
-                platform="feishu"
-                cards={feishuDashboard?.cards}
-                days={feishuDashboard?.window.days ?? 7}
-                coverage={feishuDashboard?.coverage}
-                priorities={feishuDashboard?.priority_workspace}
-                attention={attention}
-                lastSuccessAt={feishuDashboard?.source.last_success_at ?? null}
-                stale={feishuDashboard?.source.stale ?? true}
-              />
-            </section>
-            <div id="priority-workspace" className="priority-workspace-wrap">
+            <div id="priority-workspace-wechat" className="priority-workspace-wrap">
               <div className="platform-dashboard-header compact-platform-header"><span className="platform-chip platform-chip-wechat">微信</span><div><h2>微信优先群聊</h2></div></div>
               <PriorityWorkspace
                 data={dashboard?.priority_workspace}
@@ -314,7 +325,7 @@ export default function Page() {
                 saving={prioritySaving}
               />
             </div>
-            <div className="priority-workspace-wrap">
+            <div id="priority-workspace-feishu" className="priority-workspace-wrap">
               <div className="platform-dashboard-header compact-platform-header"><span className="platform-chip platform-chip-feishu">飞书</span><div><h2>飞书优先群聊</h2></div></div>
               <PriorityWorkspace
                 data={feishuDashboard?.priority_workspace}

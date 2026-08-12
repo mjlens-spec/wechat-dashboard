@@ -11,6 +11,7 @@ import {
   Clock3,
   MessageCircleWarning,
   RefreshCw,
+  RotateCcw,
   ShieldAlert,
   X,
 } from 'lucide-react';
@@ -181,7 +182,7 @@ export default function AttentionPage() {
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-3)]">
               <Clock3 size={12} />
-              当前 Terra Skill 任务运行且页面打开时每 15 分钟检查一次 · 结论必须引用本机消息证据
+              已处理与已忽略事项不会重复提示 · 恢复后可重新进入待关注
             </div>
           </div>
 
@@ -278,6 +279,11 @@ function AttentionCard({ alert, onStatus }: { alert: AttentionItem; onStatus: (i
             <button className={`btn ${isUrgent ? 'btn-primary' : ''}`} onClick={() => void onStatus(alert.id, 'handled')}><CheckCircle2 size={13} />已处理</button>
             <button className="btn" onClick={() => void onStatus(alert.id, 'dismissed')}><X size={13} />忽略</button>
           </>
+        )}
+        {alert.status !== 'open' && (
+          <button className="btn" onClick={() => void onStatus(alert.id, 'open')}>
+            <RotateCcw size={13} />恢复待关注
+          </button>
         )}
         <span>置信度 {alert.confidence.toFixed(2)}</span>
       </div>

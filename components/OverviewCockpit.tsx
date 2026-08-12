@@ -64,7 +64,8 @@ export default function OverviewCockpit({
   platform: 'wechat' | 'feishu';
 }) {
   const platformAlerts = attention?.alerts.filter((alert) => alert.platform === platform) ?? [];
-  const openAlerts = platformAlerts.filter((alert) => alert.status === 'open').slice(0, 5);
+  const openAlertCount = platformAlerts.filter((alert) => alert.status === 'open').length;
+  const openAlerts = platformAlerts.filter((alert) => alert.status === 'open').slice(0, 3);
   const highestPriority = platformAlerts.filter(
     (alert) => alert.status === 'open' && isUrgent(alert.severity),
   ).length;
@@ -75,7 +76,7 @@ export default function OverviewCockpit({
         <header className="needs-header">
           <div>
             <div className="report-kicker">Today · Needs you</div>
-            <h1>今天要处理什么</h1>
+            <h1>{platform === 'wechat' ? '微信' : '飞书'}今天要处理什么</h1>
             <p>
               {modelLabel(
                 attention?.intelligence?.display_model,
@@ -95,10 +96,31 @@ export default function OverviewCockpit({
             </p>
           </div>
           <div className="needs-count">
-            <strong>{platformAlerts.filter((alert) => alert.status === 'open').length}</strong>
+            <strong>{openAlertCount}</strong>
             <span>项待处理 · {highestPriority} 项最高优先</span>
           </div>
         </header>
+
+        <div className="conversation-snapshot">
+          <SnapshotMetric
+            label={`窗口消息 · ${days} 天`}
+            value={cards?.total_messages.toLocaleString() ?? '—'}
+          />
+          <SnapshotMetric
+            label="群聊 · 活跃 / 已发现"
+            value={cards ? `${cards.active_groups} / ${cards.total_groups}` : '—'}
+          />
+          <SnapshotMetric
+            label="私信 · 活跃 / 已发现"
+            value={cards ? `${cards.active_private} / ${cards.total_private}` : '—'}
+            secondary
+          />
+          <SnapshotMetric
+            label="数据新鲜度"
+            value={lastSuccessAt ? relativeTime(lastSuccessAt) : '未同步'}
+            danger={stale}
+          />
+        </div>
 
         <div className="needs-list">
           {openAlerts.length ? (
@@ -119,7 +141,7 @@ export default function OverviewCockpit({
                   <p>建议动作：{alert.suggested_action}</p>
                 </div>
                 <div className="needs-source">
-                  <span>{alert.group_name}</span>
+                  <span>{alert.group_name} · {alert.chat_type === 'group' ? '群聊' : '私信'}</span>
                   <span>{formatTime(alert.last_detected_at)} · {alert.evidence_count} 条证据</span>
                 </div>
               </article>
@@ -135,35 +157,17 @@ export default function OverviewCockpit({
 
         <footer className="panel-footer">
           <span>
-            {platformAlerts.filter((alert) => alert.status === 'open').length > openAlerts.length
-              ? `还有 ${platformAlerts.filter((alert) => alert.status === 'open').length - openAlerts.length} 项提示`
+            {openAlertCount > openAlerts.length
+              ? `还有 ${openAlertCount - openAlerts.length} 项提示`
               : '今天的待关注提示已全部列出'}
           </span>
           <Link href="/attention">查看全部重点关注提示 →</Link>
         </footer>
       </div>
 
-      <aside className="ledger-panel">
-        <div className="ledger-kicker report-kicker">Local ledger · 本机账本</div>
-        <LedgerRow label={`窗口消息 · ${days} 天`} value={cards?.total_messages.toLocaleString() ?? '—'} />
-        <LedgerRow
-          label="活跃群聊 / 已发现"
-          value={cards ? `${cards.active_groups} / ${cards.total_groups}` : '—'}
-        />
-        <LedgerRow
-          label="活跃私信 / 已发现"
-          value={cards ? `${cards.active_private} / ${cards.total_private}` : '—'}
-          secondary
-        />
-        <LedgerRow
-          label="数据新鲜度"
-          value={lastSuccessAt ? relativeTime(lastSuccessAt) : '未同步'}
-          danger={stale}
-          strongDivider
-        />
-
+      <aside className="overview-support-grid">
         <CoverageLedger coverage={coverage} />
-        <PriorityLedger priorities={priorities} />
+        <PriorityLedger priorities={priorities} platform={platform} />
 
         <footer className="ledger-footer">
           数据源：{platform === 'wechat' ? '本机微信 Mac 客户端' : '飞书 CLI 用户认证'} · SQLite 快照只保存在本机
@@ -173,21 +177,19 @@ export default function OverviewCockpit({
   );
 }
 
-function LedgerRow({
+function SnapshotMetric({
   label,
   value,
   secondary = false,
   danger = false,
-  strongDivider = false,
 }: {
   label: string;
   value: string;
   secondary?: boolean;
   danger?: boolean;
-  strongDivider?: boolean;
 }) {
   return (
-    <div className={`ledger-row ${strongDivider ? 'ledger-row-strong' : ''}`}>
+    <div className="snapshot-metric">
       <span>{label}</span>
       <strong className={danger ? 'text-danger' : secondary ? 'text-secondary' : ''}>{value}</strong>
     </div>
@@ -240,14 +242,20 @@ function CoverageLedger({ coverage }: { coverage?: CoverageData }) {
   );
 }
 
-function PriorityLedger({ priorities }: { priorities?: PriorityWorkspaceData }) {
-  const groups = priorities?.groups.slice(0, 5) ?? [];
+function PriorityLedger({
+  priorities,
+  platform,
+}: {
+  priorities?: PriorityWorkspaceData;
+  platform: 'wechat' | 'feishu';
+}) {
+  const groups = priorities?.groups.slice(0, 3) ?? [];
   const maxScore = Math.max(1, ...groups.map((group) => group.priority_score));
   return (
     <section className="priority-ledger">
       <div className="priority-ledger-heading">
         <div className="report-kicker">优先群聊 · 按权重排序</div>
-        <a href="#priority-workspace">全部 {priorities?.counts.total_groups ?? 0} →</a>
+        <a href={`#priority-workspace-${platform}`}>全部 {priorities?.counts.total_groups ?? 0} →</a>
       </div>
       <div className="priority-ledger-list">
         {groups.length ? groups.map((group, index) => (

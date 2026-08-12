@@ -12,6 +12,7 @@
     "keyword:verify": "node scripts/verify-keyword-tracking.mjs",
     "priority:verify:live": "node scripts/verify-priority-workspace.mjs",
     "intelligence:verify": "node scripts/verify-intelligence.mjs",
+    "intelligence:suppression:verify": "node scripts/verify-intelligence-suppression.mjs",
     "feishu:verify": "node scripts/verify-feishu-sync-policy.mjs",
     "reader:inspect": "node scripts/reader/inspect-reader.mjs",
     "service:uninstall": "node scripts/install-dashboard-service.mjs --uninstall",

@@ -9,6 +9,7 @@ import {
   classifyWorkGroup,
   type SignalName,
 } from './intelligence-rules';
+import { matchesSuppressedItem } from './intelligence-suppression.mjs';
 
 export const SUMMARY_INTERVAL_MS = UPDATE_INTERVAL_MS;
 export const ANALYSIS_JOB_TTL_MS = 30 * 60 * 1000;
@@ -147,6 +148,12 @@ interface ContextGroup {
   likely_work_group: boolean;
   work_score: number;
   work_group_reasons: string[];
+  suppressed_items: Array<{
+    type: 'alert' | 'opportunity';
+    category: AttentionCategory | OpportunityCategory;
+    title: string;
+    status: AttentionStatus | OpportunityStatus;
+  }>;
   messages: ContextMessage[];
 }
 
@@ -156,10 +163,15 @@ export function createAnalysisExport(
 ) {
   expireOldJobs(now.getTime());
   const day = localDay(now);
-  const groups = collectContextGroups(day);
   const lastSummaryAt = latestSummaryTimestamp(day);
   const summaryDue = !lastSummaryAt || now.getTime() - lastSummaryAt >= SUMMARY_INTERVAL_MS;
   const requestedOutputs = requestedOutputsFor(mode, summaryDue);
+  const groups = collectContextGroups(
+    day,
+    (requestedOutputs as readonly string[]).some(
+      (output) => output === 'alerts' || output === 'opportunities',
+    ),
+  );
 
   if (groups.length === 0) {
     return {
@@ -227,7 +239,7 @@ export function createAnalysisExport(
     next_actions: ['使用 Terra High 生成结构化结果', '校验证据 ID 后导回 Dashboard'],
     artifacts: [],
     context: {
-      schema_version: 2,
+      schema_version: 3,
       job: {
         id: jobId,
         token,
@@ -296,6 +308,8 @@ export function importAnalysisResult(raw: unknown, now = Date.now()) {
   let summaryCount = 0;
   let alertCount = 0;
   let opportunityCount = 0;
+  let suppressedAlertCount = 0;
+  let suppressedOpportunityCount = 0;
   db().transaction(() => {
     for (const summary of parsed.analysis.summaries) {
       const messageCount = summary.evidence_ids.length;
@@ -311,7 +325,7 @@ export function importAnalysisResult(raw: unknown, now = Date.now()) {
       summaryCount++;
     }
     for (const alert of parsed.analysis.alerts) {
-      upsertAttentionAlert(
+      const imported = upsertAttentionAlert(
         job.day,
         job.id,
         parsed.analysis.model,
@@ -319,10 +333,11 @@ export function importAnalysisResult(raw: unknown, now = Date.now()) {
         alert,
         now,
       );
-      alertCount++;
+      if (imported) alertCount++;
+      else suppressedAlertCount++;
     }
     for (const opportunity of parsed.analysis.opportunities) {
-      upsertBusinessOpportunity(
+      const imported = upsertBusinessOpportunity(
         job.day,
         job.id,
         parsed.analysis.model,
@@ -330,7 +345,8 @@ export function importAnalysisResult(raw: unknown, now = Date.now()) {
         opportunity,
         now,
       );
-      opportunityCount++;
+      if (imported) opportunityCount++;
+      else suppressedOpportunityCount++;
     }
     db()
       .prepare(
@@ -341,12 +357,17 @@ export function importAnalysisResult(raw: unknown, now = Date.now()) {
       .run(now, parsed.analysis.model, parsed.analysis.reasoning_effort, job.id);
   })();
   secureDatabaseFiles();
+  const suppressedCount = suppressedAlertCount + suppressedOpportunityCount;
   return {
     status: 'imported' as const,
-    summary: `已写入 ${summaryCount} 个会话汇总、${alertCount} 条重点关注提示和 ${opportunityCount} 条潜在商机。`,
+    summary: `已写入 ${summaryCount} 个会话汇总、${alertCount} 条重点关注提示和 ${opportunityCount} 条潜在商机${suppressedCount ? `，另跳过 ${suppressedCount} 条已处理或已忽略事项` : ''}。`,
     next_actions: ['在 Dashboard 中查看会话汇总、重点关注提示与潜在商机'],
     artifacts: [],
     imported: { summaries: summaryCount, alerts: alertCount, opportunities: opportunityCount },
+    suppressed: {
+      alerts: suppressedAlertCount,
+      opportunities: suppressedOpportunityCount,
+    },
   };
 }
 
@@ -669,7 +690,7 @@ export class AnalysisImportError extends Error {
   }
 }
 
-function collectContextGroups(day: string): ContextGroup[] {
+function collectContextGroups(day: string, includeSuppressedItems: boolean): ContextGroup[] {
   const config = readConfig();
   const groupRows = db()
     .prepare(
@@ -734,6 +755,9 @@ function collectContextGroups(day: string): ContextGroup[] {
       likely_work_group: work.likely_work_group,
       work_score: work.work_score,
       work_group_reasons: work.reasons,
+      suppressed_items: includeSuppressedItems
+        ? suppressedItemsForConversation(groupRow.id)
+        : [],
       messages,
     });
     remaining -= messages.length;
@@ -806,6 +830,8 @@ function analysisRules() {
       '每个群必须独立分析、独立生成一条 summary；禁止把多个群合并成总汇总。',
     evidence:
       '每条结论都必须引用当前上下文内的 evidence_id；没有证据时不得生成。',
+    suppression:
+      '每个会话的 suppressed_items 是用户已处理、跟进、转化或忽略的事项；同一事项即使措辞或证据组合变化，也不得再次生成。',
     alerts: {
       mention: '只识别明确 @ 到 profile.my_names 的重点信息。',
       customer_emotion: '客户或外部合作方出现明显情绪爆发、激烈措辞或强烈不满。',
@@ -922,6 +948,7 @@ function upsertAttentionAlert(
   alert: z.infer<typeof AlertSchema>,
   now: number,
 ) {
+  if (isAttentionAlertSuppressed(alert)) return false;
   const alertId = `a_${digest(
     [day, alert.group_id, alert.category, ...[...alert.evidence_ids].sort()].join('\u0000'),
   ).slice(0, 28)}`;
@@ -965,6 +992,7 @@ function upsertAttentionAlert(
       now,
       jobId,
     );
+  return true;
 }
 
 function upsertBusinessOpportunity(
@@ -975,6 +1003,7 @@ function upsertBusinessOpportunity(
   opportunity: z.infer<typeof OpportunitySchema>,
   now: number,
 ) {
+  if (isBusinessOpportunitySuppressed(opportunity)) return false;
   const opportunityId = `o_${digest(
     [
       day,
@@ -1025,6 +1054,141 @@ function upsertBusinessOpportunity(
       now,
       jobId,
     );
+  return true;
+}
+
+function suppressedItemsForConversation(chatroomId: string) {
+  const alertRows = db()
+    .prepare(
+      `SELECT id, category, status, title_cipher, handled_at, last_detected_at
+       FROM attention_alerts
+       WHERE chatroom_id = ? AND status IN ('handled', 'dismissed')
+       ORDER BY COALESCE(handled_at, last_detected_at) DESC
+       LIMIT 20`,
+    )
+    .all(chatroomId) as Array<{
+    id: string;
+    category: AttentionCategory;
+    status: 'handled' | 'dismissed';
+    title_cipher: string;
+    handled_at: number | null;
+    last_detected_at: number;
+  }>;
+  const opportunityRows = db()
+    .prepare(
+      `SELECT id, category, status, title_cipher, handled_at, last_detected_at
+       FROM business_opportunities
+       WHERE chatroom_id = ? AND status IN ('following', 'converted', 'dismissed')
+       ORDER BY COALESCE(handled_at, last_detected_at) DESC
+       LIMIT 20`,
+    )
+    .all(chatroomId) as Array<{
+    id: string;
+    category: OpportunityCategory;
+    status: 'following' | 'converted' | 'dismissed';
+    title_cipher: string;
+    handled_at: number | null;
+    last_detected_at: number;
+  }>;
+
+  return [
+    ...alertRows.map((row) => ({
+      type: 'alert' as const,
+      category: row.category,
+      title: decryptForSuppression(row.title_cipher, alertContext(row.id, 'title')),
+      status: row.status,
+      updatedAt: row.handled_at ?? row.last_detected_at,
+    })),
+    ...opportunityRows.map((row) => ({
+      type: 'opportunity' as const,
+      category: row.category,
+      title: decryptForSuppression(
+        row.title_cipher,
+        opportunityContext(row.id, 'title'),
+      ),
+      status: row.status,
+      updatedAt: row.handled_at ?? row.last_detected_at,
+    })),
+  ]
+    .filter((item) => item.title)
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .slice(0, 24)
+    .map((item) => ({
+      type: item.type,
+      category: item.category,
+      title: item.title,
+      status: item.status,
+    }));
+}
+
+function isAttentionAlertSuppressed(alert: z.infer<typeof AlertSchema>) {
+  const rows = db()
+    .prepare(
+      `SELECT id, title_cipher, detail_cipher, evidence_ids
+       FROM attention_alerts
+       WHERE chatroom_id = ? AND category = ?
+         AND status IN ('handled', 'dismissed')`,
+    )
+    .all(alert.group_id, alert.category) as Array<{
+    id: string;
+    title_cipher: string;
+    detail_cipher: string;
+    evidence_ids: string;
+  }>;
+
+  return rows.some((row) =>
+    matchesSuppressedItem(
+      {
+        evidenceIds: alert.evidence_ids,
+        title: alert.title,
+        detail: alert.detail,
+      },
+      {
+        evidenceIds: safeJsonArray(row.evidence_ids),
+        title: decryptForSuppression(row.title_cipher, alertContext(row.id, 'title')),
+        detail: decryptForSuppression(row.detail_cipher, alertContext(row.id, 'detail')),
+      },
+    ),
+  );
+}
+
+function isBusinessOpportunitySuppressed(
+  opportunity: z.infer<typeof OpportunitySchema>,
+) {
+  const rows = db()
+    .prepare(
+      `SELECT id, title_cipher, detail_cipher, evidence_ids
+       FROM business_opportunities
+       WHERE chatroom_id = ? AND category = ?
+         AND status IN ('following', 'converted', 'dismissed')`,
+    )
+    .all(opportunity.group_id, opportunity.category) as Array<{
+    id: string;
+    title_cipher: string;
+    detail_cipher: string;
+    evidence_ids: string;
+  }>;
+
+  return rows.some((row) =>
+    matchesSuppressedItem(
+      {
+        evidenceIds: opportunity.evidence_ids,
+        title: opportunity.title,
+        detail: opportunity.detail,
+      },
+      {
+        evidenceIds: safeJsonArray(row.evidence_ids),
+        title: decryptForSuppression(
+          row.title_cipher,
+          opportunityContext(row.id, 'title'),
+        ),
+        detail: decryptForSuppression(
+          row.detail_cipher,
+          opportunityContext(row.id, 'detail'),
+        ),
+      },
+    ),
+  );
 }
 
 function latestSummaryTimestamp(day: string) {
@@ -1086,6 +1250,14 @@ function decryptOrPlaceholder(ciphertext: string, context: string) {
     return decryptSensitiveText(ciphertext, context);
   } catch {
     return '[本机数据无法解密]';
+  }
+}
+
+function decryptForSuppression(ciphertext: string, context: string) {
+  try {
+    return decryptSensitiveText(ciphertext, context);
+  } catch {
+    return '';
   }
 }
 

@@ -72,6 +72,7 @@ The analysis must be produced by `gpt-5.6-terra` with reasoning effort `high`. T
 ## Evidence and Separation
 
 - Read inputs from `context.conversations`.
+- Treat each conversation's `suppressed_items` as final user decisions. Do not recreate the same alert or opportunity with different wording, newer evidence, or another status unless the user has reopened it in the Dashboard.
 - Copy conversation IDs into the compatibility field `group_id` exactly.
 - Every cited evidence ID must exist in that same conversation.
 - Produce at most one summary per conversation.

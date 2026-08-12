@@ -61,7 +61,7 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
    - Wait for the worker to finish, then continue with import. The orchestrating agent must not replace or reinterpret the Terra result with another model.
 5. If model override is unavailable, continue locally only when the current task is explicitly running `gpt-5.6-terra` at reasoning `high`. If the host cannot prove that condition, stop the semantic cycle with `TERRA_HIGH_UNAVAILABLE`; leave the local sync result intact.
 6. Analyze each conversation independently. Never merge multiple conversations into one summary. Include a summary only when that conversation has meaningful messages, using evidence from the same conversation.
-7. Use semantic judgment for alerts. Rule signals are candidate hints, not conclusions. Exclude ordinary chat, weak speculation, and issues resolved by later messages.
+7. Use semantic judgment for alerts. Rule signals are candidate hints, not conclusions. Exclude ordinary chat, weak speculation, issues resolved by later messages, and any alert or opportunity matching that conversation's `suppressed_items` even when the wording or evidence set changes.
 8. Run:
 
    `zsh <skill-dir>/scripts/run-bridge.zsh import --context <context-path> --result <result-path>`
