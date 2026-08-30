@@ -25,6 +25,7 @@ export interface Config {
   autoSyncMinutes: number;
   accountDirectory: string | null;
   feishuEnabled: boolean;
+  analyzeGroupMedia: boolean;
   analyzeWeChatPrivate: boolean;
   analyzeFeishuPrivate: boolean;
 }
@@ -47,6 +48,7 @@ const DEFAULTS: Config = {
   autoSyncMinutes: UPDATE_INTERVAL_MINUTES,
   accountDirectory: null,
   feishuEnabled: true,
+  analyzeGroupMedia: false,
   analyzeWeChatPrivate: false,
   analyzeFeishuPrivate: false,
 };

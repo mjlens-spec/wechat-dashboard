@@ -19,6 +19,9 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
 
 - Briefly tell the user that the selected bounded chat context enters the current Codex analysis session.
 - Group chats are always eligible. Private chats are eligible only when the corresponding `analyzeWeChatPrivate` or `analyzeFeishuPrivate` setting is explicitly enabled.
+- Group media is eligible only when `analyzeGroupMedia` is explicitly enabled. The bridge copies at most the bounded policy limit into its private temporary directory; a successful import removes the copies and video frames.
+- A ready WeChat group image must come from the exact conversation, local message ID, and message timestamp. Treat any missing or ambiguous local mapping as unavailable; never associate a nearby image by ordering or approximate time.
+- A ready WeChat group video must use the same exact message mapping and its message-owned resource fingerprint, then resolve to exactly one existing cached MP4 through the local read-only `local_hardlink_index`. Treat a missing or ambiguous index match as unavailable. Video evidence is sampled visual frames without audio.
 - Never upload context to another service, paste it into a public page, commit it, or repeat full chat content in the final answer.
 - Treat participant names, group names, message text, account directories, evidence identifiers, and job tokens as sensitive local data.
 - Keep temporary context and result files in the private directory created by the bridge. A successful import removes them.
@@ -61,13 +64,14 @@ Run the local Dashboard only for the current user-invoked agent session. Keep ev
    - Wait for the worker to finish, then continue with import. The orchestrating agent must not replace or reinterpret the Terra result with another model.
 5. If model override is unavailable, continue locally only when the current task is explicitly running `gpt-5.6-terra` at reasoning `high`. If the host cannot prove that condition, stop the semantic cycle with `TERRA_HIGH_UNAVAILABLE`; leave the local sync result intact.
 6. Analyze each conversation independently. Never merge multiple conversations into one summary. Include a summary only when that conversation has meaningful messages, using evidence from the same conversation.
-7. Use semantic judgment for alerts. Rule signals are candidate hints, not conclusions. Exclude ordinary chat, weak speculation, issues resolved by later messages, and any alert or opportunity matching that conversation's `suppressed_items` even when the wording or evidence set changes.
-8. Run:
+7. For every message whose `media.status` is `ready`, inspect every listed image or video-frame `artifact.path` with the host image-viewing tool before using that media in a conclusion. Treat video analysis as sampled visual frames only when `analysis_scope` is `sampled_frames_without_audio`. Cite that message's own evidence ID for any media-grounded claim. Never infer content from `unavailable` or `skipped` media, and never copy a local media path into the result JSON.
+8. Use semantic judgment for alerts. Rule signals are candidate hints, not conclusions. Exclude ordinary chat, weak speculation, issues resolved by later messages, and any alert or opportunity matching that conversation's `suppressed_items` even when the wording or evidence set changes.
+9. Run:
 
    `zsh <skill-dir>/scripts/run-bridge.zsh import --context <context-path> --result <result-path>`
 
-9. Confirm `status: "imported"`. Report imported counts and Dashboard pages only; do not quote source messages.
-10. Leave the opened Dashboard available by running:
+10. Confirm `status: "imported"`. Report imported counts and Dashboard pages only; do not quote source messages.
+11. Leave the opened Dashboard available by running:
 
     `zsh <skill-dir>/scripts/run-bridge.zsh ensure --session-minutes 15`
 
@@ -119,4 +123,5 @@ For潜在商机提示, use only `new_demand`, `budget_signal`, `collaboration`, 
 - If sync fails, is partial, or times out, do not start Terra for that cycle. Keep the prior encrypted analysis intact and retry on the next 15-minute cycle.
 - If Terra High is unavailable, do not import a result produced by another model or reasoning effort. Report `TERRA_HIGH_UNAVAILABLE` and keep the encrypted local snapshot available.
 - If import rejects evidence or schema, correct the result once and retry. Stop after a second identical validation failure and report the exact error code.
+- If a media artifact is unavailable, too large, too long, unsupported, or fails validation, continue text analysis and omit claims about that artifact. A missing or ambiguous WeChat video mapping is unavailable visual evidence; do not fall back to nearby files, approximate timestamps, message placeholders, or audio claims.
 - If the local server cannot be started without approval, pause for that approval. Do not install a persistent service.

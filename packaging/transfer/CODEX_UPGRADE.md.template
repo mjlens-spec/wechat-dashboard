@@ -77,6 +77,7 @@ pnpm keyword:verify
 pnpm priority:verify
 pnpm session:verify
 pnpm security:verify
+pnpm media:verify
 pnpm feishu:verify
 pnpm skill:verify:transfer
 pnpm skill:check:codex

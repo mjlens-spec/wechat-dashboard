@@ -119,9 +119,12 @@ interface EncryptedGroupRow {
 interface EncryptedMessageRow {
   chatroom_id: string;
   message_id: string;
+  source_message_id: string | null;
+  local_id: number | null;
   sender_cipher: string;
   content_cipher: string;
   time: string;
+  date: string;
   timestamp: number;
   type: string;
 }
@@ -135,6 +138,19 @@ interface ContextMessage {
   type: string;
   signals: SignalName[];
   candidate_reasons: string[];
+  media_request?: {
+    kind: 'image' | 'video';
+    platform: 'wechat' | 'feishu';
+    conversation_id: string;
+    source_message_id: string | null;
+    local_id: number | null;
+    date: string;
+    timestamp: number;
+    resource_keys?: {
+      image: string[];
+      file: string[];
+    };
+  };
 }
 
 interface ContextGroup {
@@ -239,7 +255,7 @@ export function createAnalysisExport(
     next_actions: ['使用 Terra High 生成结构化结果', '校验证据 ID 后导回 Dashboard'],
     artifacts: [],
     context: {
-      schema_version: 3,
+      schema_version: 4,
       job: {
         id: jobId,
         token,
@@ -257,6 +273,12 @@ export function createAnalysisExport(
             : 'my_names 为空，本次禁止生成 mention 提示；请先在本机设置中填写本人昵称。',
       },
       generation_rules: analysisRules(),
+      media_processing: {
+        enabled: config.analyzeGroupMedia,
+        scope: 'group_only',
+        policy:
+          '只有 status=ready 且已实际查看 artifact 的媒体才能进入结论；unavailable/skipped 不得推断内容。',
+      },
       last_summary_generated_at: lastSummaryAt
         ? new Date(lastSummaryAt).toISOString()
         : null,
@@ -723,8 +745,9 @@ function collectContextGroups(day: string, includeSuppressedItems: boolean): Con
     const limit = Math.min(MAX_MESSAGES_PER_GROUP, remaining);
     const rows = db()
       .prepare(
-        `SELECT chatroom_id, message_id, sender_cipher, content_cipher,
-                time, timestamp, type
+        `SELECT chatroom_id, message_id, source_message_id, local_id,
+                sender_cipher, content_cipher,
+                time, date, timestamp, type
          FROM messages
          WHERE chatroom_id = ? AND date = ? AND deleted = 0
          ORDER BY timestamp DESC, message_id DESC
@@ -733,7 +756,15 @@ function collectContextGroups(day: string, includeSuppressedItems: boolean): Con
       .all(groupRow.id, day, limit) as EncryptedMessageRow[];
     const messages = rows
       .reverse()
-      .map((row) => decryptContextMessage(row, myNames))
+      .map((row) =>
+        decryptContextMessage(
+          row,
+          myNames,
+          groupRow.platform,
+          groupRow.chat_type,
+          config.analyzeGroupMedia,
+        ),
+      )
       .filter((row): row is ContextMessage => Boolean(row));
     if (messages.length === 0) continue;
     const name = decryptOrPlaceholder(
@@ -768,16 +799,26 @@ function collectContextGroups(day: string, includeSuppressedItems: boolean): Con
 function decryptContextMessage(
   row: EncryptedMessageRow,
   myNames: string[],
+  platform: 'wechat' | 'feishu',
+  chatType: 'group' | 'private',
+  analyzeGroupMedia: boolean,
 ): ContextMessage | null {
   try {
     const sender = decryptSensitiveText(
       row.sender_cipher,
       `message:sender:${row.chatroom_id}:${row.message_id}`,
     );
-    const content = decryptSensitiveText(
+    const decryptedContent = decryptSensitiveText(
       row.content_cipher,
       `message:content:${row.chatroom_id}:${row.message_id}`,
     ).slice(0, MAX_MESSAGE_CONTENT);
+    const mediaKind = classifyMediaKind(platform, row.type);
+    const resourceKeys =
+      platform === 'feishu' && mediaKind ? extractFeishuMediaKeys(decryptedContent) : undefined;
+    const content =
+      platform === 'feishu' && mediaKind
+        ? sanitizeFeishuMediaContent(decryptedContent, mediaKind)
+        : decryptedContent;
     const classification = classifyMessageSignals(content, myNames);
     return {
       evidence_id: evidenceId(row.chatroom_id, row.message_id),
@@ -786,11 +827,57 @@ function decryptContextMessage(
       time: row.time,
       timestamp: row.timestamp,
       type: row.type,
+      ...(analyzeGroupMedia && chatType === 'group' && mediaKind
+        ? {
+            media_request: {
+              kind: mediaKind,
+              platform,
+              conversation_id: row.chatroom_id,
+              source_message_id: row.source_message_id,
+              local_id: row.local_id,
+              date: row.date,
+              timestamp: row.timestamp,
+              ...(resourceKeys ? { resource_keys: resourceKeys } : {}),
+            },
+          }
+        : {}),
       ...classification,
     };
   } catch {
     return null;
   }
+}
+
+function extractFeishuMediaKeys(content: string) {
+  const keys = Array.from(
+    content.matchAll(/(?:^|[^A-Za-z0-9_-])((?:img|file)_[A-Za-z0-9_-]{6,})/g),
+    (match) => match[1],
+  );
+  return {
+    image: [...new Set(keys.filter((key) => key.startsWith('img_')))],
+    file: [...new Set(keys.filter((key) => key.startsWith('file_')))],
+  };
+}
+
+function sanitizeFeishuMediaContent(content: string, kind: 'image' | 'video') {
+  const placeholder = kind === 'image' ? '[图片资源]' : '[视频资源]';
+  const sanitized = content.replace(/(?:img|file)_[A-Za-z0-9_-]{6,}/g, placeholder).trim();
+  return sanitized || placeholder;
+}
+
+function classifyMediaKind(
+  platform: 'wechat' | 'feishu',
+  type: string,
+): 'image' | 'video' | null {
+  const normalized = type.trim().toLowerCase();
+  if (platform === 'wechat') {
+    if (normalized === '图片' || normalized === 'image' || normalized === 'img') return 'image';
+    if (normalized === '视频' || normalized === 'video') return 'video';
+    return null;
+  }
+  if (normalized === 'image') return 'image';
+  if (normalized === 'media' || normalized === 'video') return 'video';
+  return null;
 }
 
 function collectMessageLookup(day: string, groups: ContextGroup[]) {

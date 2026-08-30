@@ -30,11 +30,13 @@ run_check "pnpm" pnpm --version
 run_optional "飞书 CLI" pnpm exec lark-cli --version
 run_optional "飞书用户授权" pnpm exec lark-cli auth status --json --verify
 run_optional "微信读取器" pnpm reader:inspect
+run_optional "视频抽帧工具" ffmpeg -version
 run_check "私有路径" pnpm security:verify
 run_check "会话策略" pnpm session:verify
 run_check "优先级策略" pnpm priority:verify
 run_check "关键词来源策略" pnpm keyword:verify
 run_check "飞书截断策略" pnpm feishu:verify
+run_check "群媒体分析边界" pnpm media:verify
 run_check "Codex Skill 隔离安装" pnpm skill:verify:transfer
 run_check "Codex Skill" pnpm skill:check:codex
 

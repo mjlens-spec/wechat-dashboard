@@ -27,6 +27,7 @@ type SetupStatus = {
     autoSyncMinutes: number;
     myNicknames: string[];
     feishuEnabled: boolean;
+    analyzeGroupMedia: boolean;
     analyzeWeChatPrivate: boolean;
     analyzeFeishuPrivate: boolean;
   };
@@ -57,6 +58,7 @@ export default function SetupPage() {
   const [defaultSyncDays, setDefaultSyncDays] = useState(7);
   const [myNicknames, setMyNicknames] = useState('');
   const [feishuEnabled, setFeishuEnabled] = useState(true);
+  const [analyzeGroupMedia, setAnalyzeGroupMedia] = useState(false);
   const [analyzeWeChatPrivate, setAnalyzeWeChatPrivate] = useState(false);
   const [analyzeFeishuPrivate, setAnalyzeFeishuPrivate] = useState(false);
   const [keywords, setKeywords] = useState<KeywordSetting[]>([]);
@@ -82,6 +84,7 @@ export default function SetupPage() {
       setDefaultSyncDays(data.config.defaultSyncDays ?? 7);
       setMyNicknames((data.config.myNicknames ?? []).join('、'));
       setFeishuEnabled(data.config.feishuEnabled ?? true);
+      setAnalyzeGroupMedia(data.config.analyzeGroupMedia ?? false);
       setAnalyzeWeChatPrivate(data.config.analyzeWeChatPrivate ?? false);
       setAnalyzeFeishuPrivate(data.config.analyzeFeishuPrivate ?? false);
       setKeywords(keywordData.keywords ?? []);
@@ -140,6 +143,7 @@ export default function SetupPage() {
           privacyConfirmed,
           defaultSyncDays,
           feishuEnabled,
+          analyzeGroupMedia,
           analyzeWeChatPrivate,
           analyzeFeishuPrivate,
         }),
@@ -261,6 +265,18 @@ export default function SetupPage() {
               <div><span>双端更新</span><span>每 15 分钟</span></div>
               <div><span>语义顺序</span><span>同步完成后运行 Terra</span></div>
             </div>
+            <label className="mt-4 flex items-start gap-2 text-[14px]">
+              <input
+                className="mt-1"
+                type="checkbox"
+                checked={analyzeGroupMedia}
+                onChange={(event) => setAnalyzeGroupMedia(event.target.checked)}
+              />
+              <span>允许当前 Skill 分析群聊图片与视频画面</span>
+            </label>
+            <p className="mt-2 text-[12px] leading-relaxed text-[var(--text-3)]">
+              只处理本次受限上下文中的少量本地媒体。已缓存的微信群视频最多抽取 6 帧，仅分析画面，不转写音频；导入后删除临时副本。
+            </p>
             <label className="mt-4 flex items-start gap-2 text-[14px]">
               <input
                 className="mt-1"

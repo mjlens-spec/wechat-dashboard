@@ -29,6 +29,15 @@ try {
   if (!skill.includes('15-minute') || !skill.includes('run-bridge.zsh open')) {
     throw new Error('15-minute cadence or default-browser reuse is missing from installed Skill.');
   }
+  if (!skill.includes('analyzeGroupMedia') || !skill.includes('sampled_frames_without_audio')) {
+    throw new Error('Bounded group-media analysis contract is missing from installed Skill.');
+  }
+  if (!skill.includes('exact conversation, local message ID, and message timestamp')) {
+    throw new Error('Exact WeChat image-to-message mapping rule is missing from installed Skill.');
+  }
+  if (!skill.includes('message-owned resource fingerprint') || !skill.includes('local_hardlink_index')) {
+    throw new Error('Exact WeChat video-to-MP4 mapping rule is missing from installed Skill.');
+  }
   const wrapper = join(target, 'scripts', 'run-bridge.zsh');
   if ((lstatSync(wrapper).mode & 0o111) === 0) {
     throw new Error('Skill runtime wrapper is not executable.');

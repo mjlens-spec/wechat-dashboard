@@ -1,6 +1,6 @@
 {
   "name": "wechat-feishu-message-analysis-dashboard",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "private": true,
   "packageManager": "pnpm@11.16.0",
   "scripts": {
@@ -13,6 +13,7 @@
     "priority:verify:live": "node scripts/verify-priority-workspace.mjs",
     "intelligence:verify": "node scripts/verify-intelligence.mjs",
     "intelligence:suppression:verify": "node scripts/verify-intelligence-suppression.mjs",
+    "media:verify": "node scripts/verify-media-analysis.mjs",
     "feishu:verify": "node scripts/verify-feishu-sync-policy.mjs",
     "reader:inspect": "node scripts/reader/inspect-reader.mjs",
     "service:uninstall": "node scripts/install-dashboard-service.mjs --uninstall",
