@@ -81,6 +81,16 @@ The analysis must be produced by `gpt-5.6-terra` with reasoning effort `high`. T
 - Do not infer an @mention when `profile.my_names` is empty.
 - Private-message context appears only for a platform whose explicit setting is enabled.
 
+## Media Evidence
+
+- Media appears only for group messages when the local `analyzeGroupMedia` setting is enabled.
+- A ready WeChat image is resolved by exact conversation, local message ID, timestamp, and message-owned resource fingerprint. Nearby messages or approximate timestamps are not valid substitutes.
+- A ready WeChat video uses the same exact message mapping and must resolve through the local read-only hardlink index to exactly one existing cached MP4. Missing or ambiguous matches are not visual evidence.
+- Before relying on a message whose `media.status` is `ready`, inspect every `media.artifacts[].path` with the host image-viewing tool. A normal image has role `image`; a video contributes sampled stills with role `video_frame`.
+- `analysis_scope: sampled_frames_without_audio` supports claims about visible sampled frames only. Do not claim what was said, the full sequence of events, or anything between unobserved frames.
+- Cite the enclosing message's `evidence_id` for a media-grounded claim. Never place artifact paths, resource keys, source message IDs, or temporary filenames in the result.
+- Treat `unavailable` and `skipped` as no visual evidence. Do not infer content from the message type or placeholder text.
+
 ## Writing Style
 
 - Write concise, natural Simplified Chinese.

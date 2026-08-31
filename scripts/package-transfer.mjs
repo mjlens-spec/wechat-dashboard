@@ -178,7 +178,11 @@ function allowedUntrackedSource(path) {
     path === 'lib/keyword-tracking.ts' ||
     path === 'lib/default-browser-policy.mjs' ||
     path === 'lib/update-cadence.mjs' ||
+    path === 'lib/media-analysis.mjs' ||
+    path === 'lib/wechat-image-reader.mjs' ||
+    path === 'lib/wechat-video-reader.mjs' ||
     path === 'scripts/verify-keyword-tracking.mjs' ||
+    path === 'scripts/verify-media-analysis.mjs' ||
     path === 'packaging/transfer/CODEX_UPGRADE.md.template'
   );
 }
@@ -243,6 +247,10 @@ function verifyArchiveContents(path) {
     `${packageRootName}/${projectFolderName}/app/api/keywords/route.ts`,
     `${packageRootName}/${projectFolderName}/app/keywords/[id]/page.tsx`,
     `${packageRootName}/${projectFolderName}/lib/update-cadence.mjs`,
+    `${packageRootName}/${projectFolderName}/lib/media-analysis.mjs`,
+    `${packageRootName}/${projectFolderName}/lib/wechat-image-reader.mjs`,
+    `${packageRootName}/${projectFolderName}/lib/wechat-video-reader.mjs`,
+    `${packageRootName}/${projectFolderName}/scripts/verify-media-analysis.mjs`,
     `${packageRootName}/WECHAT_READER_TROUBLESHOOTING.md`,
   ];
   for (const entry of required) {

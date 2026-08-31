@@ -19,6 +19,7 @@ const SetupSchema = z.object({
   demoMode: z.boolean().default(false),
   defaultSyncDays: z.number().int().min(1).max(30).default(7),
   feishuEnabled: z.boolean().default(true),
+  analyzeGroupMedia: z.boolean().default(false),
   analyzeWeChatPrivate: z.boolean().default(false),
   analyzeFeishuPrivate: z.boolean().default(false),
 });
@@ -97,6 +98,7 @@ export async function POST(req: NextRequest) {
     defaultSyncDays: parsed.data.defaultSyncDays,
     autoSyncMinutes: UPDATE_INTERVAL_MINUTES,
     feishuEnabled: parsed.data.feishuEnabled,
+    analyzeGroupMedia: parsed.data.analyzeGroupMedia,
     analyzeWeChatPrivate: parsed.data.analyzeWeChatPrivate,
     analyzeFeishuPrivate: parsed.data.analyzeFeishuPrivate,
     accountDirectory,

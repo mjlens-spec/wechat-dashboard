@@ -61,4 +61,4 @@ pnpm reader:inspect
 - 保留无关的现有改动。
 - commit 使用 Conventional Commits。
 - 推送前检查 tracked files 和 diff 中没有秘密或真实数据。
-- 只推送到私人 `origin`；未经用户明确要求，不提交、不推送、不创建 PR。
+- 默认只推送到私人 `origin`。当 `origin` 为公开仓库时，必须先明确告知公开发布范围与风险，并仅在用户知情且明确授权后提交、推送、创建 PR 或发布 Release；未经用户明确要求，不执行这些操作。

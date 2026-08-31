@@ -8,6 +8,7 @@
 - 微信只读同步与飞书用户身份只读同步；
 - 群聊汇总、重点关注提示和潜在商机；
 - Terra High 语义分析契约与同会话 evidence 校验；
+- 显式开启、有数量与体积上限的微信与飞书群图片、群视频抽帧分析；微信群图片和视频使用消息级精确映射，微信群视频通过本机只读 hardlink 索引定位唯一的已缓存 MP4，完成抽样画面理解与 OCR，不转写音频；
 - SQLite 字段级加密、带来源范围的自定义关键词、loopback 服务、默认浏览器标签页复用和页面心跳按需租约；
 - Codex Skill、项目专用运行时自举、安装与验收脚本；
 - 面向既有安装的 Codex 升级说明、相对路径源码清单和升级前备份要求；
@@ -29,6 +30,7 @@
 4. 使用官方 `lark-cli` 初始化飞书应用并以 user 身份完成 IM 域授权。
 5. 打开 `/setup`，确认本机隐私边界和两端状态，再开始同步。
 6. ChatGPT Pro 可提供 Codex 使用资格，但不保证宿主一定暴露 `gpt-5.6-terra`。Skill 优先创建隔离的 Terra High 执行单元；宿主无法提供该模型与推理强度时，只运行本机同步和页面。
+7. 如需视频画面分析，确认 `ffmpeg` 与 `ffprobe` 可执行；未安装时文本和图片功能仍可使用。
 
 ## 另一台 Mac 的覆盖升级
 
@@ -44,6 +46,7 @@ pnpm rebuild better-sqlite3
 pnpm lint
 ./node_modules/.bin/tsc --noEmit
 pnpm build
+pnpm media:verify
 pnpm intelligence:verify
 pnpm priority:verify
 pnpm keyword:verify

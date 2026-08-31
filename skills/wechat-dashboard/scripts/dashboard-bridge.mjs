@@ -5,8 +5,10 @@ import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmdirSync,
   unlinkSync,
@@ -19,6 +21,7 @@ import {
   securePrivateDirectory,
   securePrivateFile,
 } from '../../../lib/private-paths.mjs';
+import { prepareMediaArtifacts } from '../../../lib/media-analysis.mjs';
 import { completedSyncAllowsSemanticAnalysis } from '../../../lib/update-cadence.mjs';
 import {
   browserAutomationAdapter,
@@ -44,6 +47,8 @@ const projectRoot = resolve(skillScriptDir, '../../..');
 const nextBin = join(projectRoot, 'node_modules', 'next', 'dist', 'bin', 'next');
 const buildId = join(projectRoot, '.next', 'BUILD_ID');
 const serviceScript = join(projectRoot, 'scripts', 'session-service.mjs');
+const wxBinary = join(projectRoot, 'node_modules', '.bin', 'wx');
+const larkBinary = join(projectRoot, 'node_modules', '.bin', 'lark-cli');
 const dataDir = join(homedir(), '.wechat-dashboard');
 const launchServicesPreferences = join(
   homedir(),
@@ -177,6 +182,10 @@ async function prepare(mode, service, syncPolicy) {
 
   const privateDir = mkdtempSync(join(tmpdir(), 'wechat-dashboard-analysis-'));
   chmodSync(privateDir, 0o700);
+  prepareMediaArtifacts(exported.context, privateDir, {
+    wxBinary,
+    larkBinary,
+  });
   const contextPath = join(privateDir, 'context.json');
   const resultPath = join(privateDir, 'result.json');
   writePrivateJson(contextPath, exported.context);
@@ -840,10 +849,18 @@ function cleanupPrivateArtifacts(contextPath, resultPath) {
   ) {
     return;
   }
-  for (const path of [resolve(contextPath), resolve(resultPath)]) {
+  const discoveredMedia = readdirSync(contextDir)
+    .filter((name) => /^(?:media-\d{3}|frame-\d{3}-\d{2})\.[a-z0-9]+$/i.test(name))
+    .map((name) => join(contextDir, name));
+  for (const path of [
+    resolve(contextPath),
+    resolve(resultPath),
+    ...discoveredMedia,
+  ]) {
     if (dirname(path) === contextDir) {
       try {
-        unlinkSync(path);
+        const stat = lstatSync(path);
+        if (stat.isFile() && !stat.isSymbolicLink()) unlinkSync(path);
       } catch {
         // Import already succeeded; a stale private temp file is non-fatal.
       }
